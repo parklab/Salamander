@@ -29,14 +29,14 @@ The following example illustrates the basic syntax:
 
 ```python
 import pandas as pd
-import salamander-learn as sal
+import salamander
 
 # samples and features have to be named appropriately
 data_path = "..."
 data = pd.read_csv(data_path, index_col=0)
 
 # NMF with a Poisson noise model
-model = sal.KLNMF(n_signatures=5)
+model = salamander.KLNMF(n_signatures=5)
 model.fit(data)
 
 # barplot
