@@ -1,0 +1,5 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Remove the tutorial jupyter notebook from the language calculation of github
+tutorial.ipynb linguist-vendored
