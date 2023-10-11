@@ -1,10 +1,43 @@
 import numpy as np
 import pandas as pd
+from numba import njit
 
 from ..utils import kl_divergence, normalize_WH, poisson_llh, samplewise_kl_divergence
 from .nmf import NMF
 
 EPSILON = np.finfo(np.float32).eps
+
+
+@njit
+def update_W(X, W, H):
+    """
+    The multiplicative update rule of the signature matrix W
+    derived by Lee and Seung. See Theorem 2 in
+    "Algorithms for non-negative matrix factorization".
+
+    Clipping the matrix avoids floating point errors.
+    """
+    W *= (X / (W @ H)) @ H.T
+    W /= np.sum(H, axis=1)
+    W = W.clip(EPSILON)
+
+    return W
+
+
+@njit
+def update_H(X, W, H):
+    """
+    The multiplicative update rule of the exposure matrix H
+    derived by Lee and Seung. See Theorem 2 in
+    "Algorithms for non-negative matrix factorization".
+
+    Clipping the matrix avoids floating point errors.
+    """
+    H *= W.T @ (X / (W @ H))
+    H /= np.sum(W, axis=0)[:, np.newaxis]
+    H = H.clip(EPSILON)
+
+    return H
 
 
 class KLNMF(NMF):
@@ -37,28 +70,10 @@ class KLNMF(NMF):
         return poisson_llh(self.X, self.W, self.H)
 
     def _update_W(self):
-        """
-        The multiplicative update rule of the signature matrix W
-        derived by Lee and Seung. See Theorem 2 in
-        "Algorithms for non-negative matrix factorization".
-
-        Clipping the matrix avoids floating point errors.
-        """
-        self.W *= (self.X / (self.W @ self.H)) @ self.H.T
-        self.W /= np.sum(self.H, axis=1)
-        self.W = self.W.clip(EPSILON)
+        self.W = update_W(self.X, self.W, self.H)
 
     def _update_H(self):
-        """
-        The multiplicative update rule of the exposure matrix H
-        derived by Lee and Seung. See Theorem 2 in
-        "Algorithms for non-negative matrix factorization".
-
-        Clipping the matrix avoids floating point errors.
-        """
-        self.H *= self.W.T @ (self.X / (self.W @ self.H))
-        self.H /= np.sum(self.W, axis=0)[:, np.newaxis]
-        self.H = self.H.clip(EPSILON)
+        self.H = update_H(self.X, self.W, self.H)
 
     def fit(
         self,

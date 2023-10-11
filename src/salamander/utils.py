@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from numba import njit
 from scipy.optimize import linear_sum_assignment
 from scipy.special import gammaln
 from scipy.stats import mannwhitneyu
@@ -71,30 +72,29 @@ def value_checker(arg_name: str, arg, allowed_values):
         )
 
 
+@njit(fastmath=True)
 def kl_divergence(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
     r"""
-    The generalized Kullback-Leibler divergence D(X || WH).
-
-    \sum_vd X_vd * ln(X_vd / (WH)_vd) - \sum_vd X_vd + \sum_vd (WH)_vd.
-
-    Summands with X_vd = 0 are neglected and WH is clipped to avoid division by zero.
+    The generalized Kullback-Leibler divergence
+    D_KL(X || WH) = \sum_vd X_vd * ln(X_vd / (WH)_vd) - \sum_vd X_vd + \sum_vd (WH)_vd.
     """
-    indices = X.nonzero()
-    X_data = X[indices]
-    WH_data = (W @ H)[indices]
-    WH_data = WH_data.clip(EPSILON)
+    V, D = X.shape
+    WH = W @ H
+    kl_divergence = 0.0
 
-    s1 = np.dot(X_data, np.log(X_data / WH_data))
-    s2 = -np.sum(X_data)
-    # fast np.sum(W @ H)
-    s3 = np.dot(np.sum(W, axis=0), np.sum(H, axis=1))
+    for v in range(V):
+        for d in range(D):
+            if X[v, d] != 0:
+                kl_divergence += X[v, d] * np.log(X[v, d] / WH[v, d])
+                kl_divergence -= X[v, d]
+            kl_divergence += WH[v, d]
 
-    return s1 + s2 + s3
+    return kl_divergence
 
 
 def samplewise_kl_divergence(X, W, H):
     """
-    A fast vectorized samplewise KL divergence.
+    Per sample generalizedKullback-Leibler divergence D_KL(x || Wh).
     """
     X_data = np.copy(X).astype(float)
     indices = X == 0
