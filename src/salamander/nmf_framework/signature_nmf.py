@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ..plot import corr_plot, exposures_plot, paper_style, signatures_plot
+from ..plot import corr_plot, exposures_plot, salamander_style, signatures_plot
 from ..utils import type_checker, value_checker
 
 
@@ -303,7 +303,7 @@ class SignatureNMF(ABC):
         """
         pass
 
-    @paper_style
+    @salamander_style
     def plot_signatures(
         self,
         catalog=None,
@@ -335,7 +335,7 @@ class SignatureNMF(ABC):
 
         return axes
 
-    @paper_style
+    @salamander_style
     def plot_exposures(
         self,
         reorder_signatures=True,

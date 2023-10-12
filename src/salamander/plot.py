@@ -17,7 +17,7 @@ from .consts import COLORS_INDEL83, COLORS_SBS96, INDEL_TYPES_83, SBS_TYPES_96
 from .utils import match_to_catalog
 
 
-def paper_style(func):
+def salamander_style(func):
     @wraps(func)
     def rc_wrapper(*args, **kwargs):
         sns.set_context("notebook")
@@ -60,7 +60,7 @@ def _annotate_plot(
         )
 
 
-@paper_style
+@salamander_style
 def scatter_1d(
     data: np.ndarray, annotations=None, annotation_kwargs=None, ax=None, **kwargs
 ):
@@ -86,7 +86,7 @@ def scatter_1d(
     return ax
 
 
-@paper_style
+@salamander_style
 def scatter_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the data points.
@@ -108,7 +108,7 @@ def scatter_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs
     return ax
 
 
-@paper_style
+@salamander_style
 def pca_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the data points.
@@ -128,7 +128,7 @@ def pca_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
     return ax
 
 
-@paper_style
+@salamander_style
 def tsne_2d(
     data, perplexity=30, annotations=None, annotation_kwargs=None, ax=None, **kwargs
 ):
@@ -153,7 +153,7 @@ def tsne_2d(
     return ax
 
 
-@paper_style
+@salamander_style
 def umap_2d(
     data,
     n_neighbors=15,
@@ -185,7 +185,7 @@ def umap_2d(
     return ax
 
 
-@paper_style
+@salamander_style
 def plot_history(function_values, figtitle="", ax=None, **kwargs):
     if ax is None:
         ax = plt.gca()
@@ -196,7 +196,7 @@ def plot_history(function_values, figtitle="", ax=None, **kwargs):
     return ax
 
 
-@paper_style
+@salamander_style
 def corr_plot(
     corr: pd.DataFrame, figsize=(6, 6), cmap="vlag", annot=True, fmt=".2f", **kwargs
 ):
@@ -258,7 +258,7 @@ def _get_colors_signature_plot(colors, mutation_types):
     return colors
 
 
-@paper_style
+@salamander_style
 def _signature_plot(
     signature, colors=None, annotate_mutation_types=False, ax=None, **kwargs
 ):
@@ -313,7 +313,7 @@ def _signature_plot(
     return ax
 
 
-@paper_style
+@salamander_style
 def signature_plot(
     signature,
     catalog=None,
@@ -376,7 +376,7 @@ def signature_plot(
     return axes
 
 
-@paper_style
+@salamander_style
 def signatures_plot(
     signatures,
     catalog=None,
@@ -459,7 +459,7 @@ def _reorder_exposures(exposures: pd.DataFrame, reorder_signatures=True):
     return exposures_reordered
 
 
-@paper_style
+@salamander_style
 def exposures_plot(
     exposures: pd.DataFrame,
     reorder_signatures=True,

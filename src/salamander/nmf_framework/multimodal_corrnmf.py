@@ -20,8 +20,8 @@ from scipy.spatial.distance import squareform
 
 from ..plot import (
     corr_plot,
-    paper_style,
     pca_2d,
+    salamander_style,
     scatter_1d,
     scatter_2d,
     signatures_plot,
@@ -431,7 +431,7 @@ class MultimodalCorrNMF:
 
         return self
 
-    @paper_style
+    @salamander_style
     def plot_signatures(
         self,
         colors=None,
@@ -468,7 +468,7 @@ class MultimodalCorrNMF:
 
         return axes
 
-    @paper_style
+    @salamander_style
     def plot_exposures(
         self,
         reorder_signatures=True,
@@ -538,7 +538,7 @@ class MultimodalCorrNMF:
     def corr_samples(self) -> pd.DataFrame:
         return self.models[0].corr_samples
 
-    @paper_style
+    @salamander_style
     def plot_correlation(self, data="signatures", annot=False, outfile=None, **kwargs):
         """
         Plot the correlation matrix of the signatures or samples.
@@ -579,7 +579,7 @@ class MultimodalCorrNMF:
 
         return annotations
 
-    @paper_style
+    @salamander_style
     def plot_embeddings(
         self,
         method="umap",
@@ -679,7 +679,7 @@ class MultimodalCorrNMF:
 
         return results
 
-    @paper_style
+    @salamander_style
     def plot_feature_change(
         self,
         in_modality=None,
