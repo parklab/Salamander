@@ -6,12 +6,13 @@ import numpy as np
 import pandas as pd
 from scipy import optimize
 
-from . import corrnmf
+from . import _utils_corrnmf
+from .corrnmf import CorrNMF
 
 EPSILON = np.finfo(np.float32).eps
 
 
-class CorrNMFDet(corrnmf.CorrNMF):
+class CorrNMFDet(CorrNMF):
     r"""
     The CorrNMFDet class implements the deterministic batch version of
     a variant of the correlated NMF (CorrNMF) algorithm devolped in
@@ -47,34 +48,37 @@ class CorrNMFDet(corrnmf.CorrNMF):
     """
 
     def _update_alpha(self):
-        self.alpha = corrnmf.update_alpha(self.X, self.L, self.U)
+        self.alpha = _utils_corrnmf.update_alpha(self.X, self.L, self.U)
 
     def _update_sigma_sq(self):
-        self.sigma_sq = corrnmf.update_sigma_sq(self.L, self.U)
+        embeddings = np.concatenate([self.L, self.U], axis=1)
+        self.sigma_sq = np.mean(embeddings**2)
         self.sigma_sq = np.clip(self.sigma_sq, EPSILON, None)
 
     def _update_W(self):
-        self.W = corrnmf.update_W(self.X, self.W, self.exposures.values)
+        self.W = _utils_corrnmf.update_W(self.X, self.W, self.exposures.values)
 
     def _update_p(self):
-        p = corrnmf.update_p_unnormalized(self.W, self.exposures.values)
+        p = _utils_corrnmf.update_p_unnormalized(self.W, self.exposures.values)
         p /= np.sum(p, axis=1, keepdims=True)
         p = p.clip(EPSILON)
         return p
 
     def _update_l(self, index, aux_row, outer_prods_U):
         def objective_fun(l):
-            return corrnmf._objective_fun_l(
+            return _utils_corrnmf.objective_function_embedding(
                 l, self.U, self.alpha, self.sigma_sq, aux_row
             )
 
-        s_grad = np.sum(aux_row * self.U, axis=1)
+        summand_grad = np.sum(aux_row * self.U, axis=1)
 
         def gradient(l):
-            return corrnmf._gradient_l(l, self.U, self.alpha, self.sigma_sq, s_grad)
+            return _utils_corrnmf.gradient_embedding(
+                l, self.U, self.alpha, self.sigma_sq, summand_grad
+            )
 
         def hessian(l):
-            return corrnmf._hessian_l(
+            return _utils_corrnmf.hessian_embedding(
                 l, self.U, self.alpha, self.sigma_sq, outer_prods_U
             )
 
@@ -109,15 +113,21 @@ class CorrNMFDet(corrnmf.CorrNMF):
         alpha = self.alpha[index]
 
         def objective_fun(u):
-            return corrnmf._objective_fun_u(u, self.L, alpha, self.sigma_sq, aux_col)
+            return _utils_corrnmf.objective_function_embedding(
+                u, self.L, alpha, self.sigma_sq, aux_col
+            )
 
-        s_grad = np.sum(aux_col * self.L, axis=1)
+        summand_grad = np.sum(aux_col * self.L, axis=1)
 
         def gradient(u):
-            return corrnmf._gradient_u(u, self.L, alpha, self.sigma_sq, s_grad)
+            return _utils_corrnmf.gradient_embedding(
+                u, self.L, alpha, self.sigma_sq, summand_grad
+            )
 
         def hessian(u):
-            return corrnmf._hessian_u(u, self.L, alpha, self.sigma_sq, outer_prods_L)
+            return _utils_corrnmf.hessian_embedding(
+                u, self.L, alpha, self.sigma_sq, outer_prods_L
+            )
 
         u = optimize.minimize(
             fun=objective_fun,

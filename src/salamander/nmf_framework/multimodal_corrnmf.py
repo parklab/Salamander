@@ -29,7 +29,7 @@ from ..plot import (
     umap_2d,
 )
 from ..utils import type_checker, value_checker
-from . import corrnmf
+from . import _utils_corrnmf
 from .corrnmf_det import CorrNMFDet
 
 EPSILON = np.finfo(np.float32).eps
@@ -186,12 +186,9 @@ class MultimodalCorrNMF:
             model._update_alpha()
 
     def _update_sigma_sq(self):
-        sum_norm_sigs = np.sum([np.sum(model.L**2) for model in self.models])
-        sum_norm_samples = np.sum(self.models[0].U ** 2)
-
-        sigma_sq = (sum_norm_sigs + sum_norm_samples) / (
-            self.dim_embeddings * (np.sum(self.ns_signatures) + self.n_samples)
-        )
+        embeddings = np.concatenate([model.L for model in self.models], axis=1)
+        embeddings = np.concatenate([embeddings, self.models[0].U], axis=1)
+        sigma_sq = np.mean(embeddings**2)
         sigma_sq = np.clip(sigma_sq, EPSILON, None)
 
         for model in self.models:
@@ -209,13 +206,13 @@ class MultimodalCorrNMF:
         sigma_sq = self.models[0].sigma_sq
         s = -np.sum(
             [
-                corrnmf._objective_fun_u(
+                _utils_corrnmf.objective_function_embedding(
                     u,
                     model.L,
                     model.alpha[index],
                     sigma_sq,
                     aux_col,
-                    add_penalty_u=False,
+                    add_penalty=False,
                 )
                 for model, aux_col in zip(self.models, aux_cols)
             ]
@@ -228,13 +225,13 @@ class MultimodalCorrNMF:
         sigma_sq = self.models[0].sigma_sq
         s = -np.sum(
             [
-                corrnmf._gradient_u(
+                _utils_corrnmf.gradient_embedding(
                     u,
                     model.L,
                     model.alpha[index],
                     sigma_sq,
                     s_grad,
-                    add_penalty_u=False,
+                    add_penalty=False,
                 )
                 for model, s_grad in zip(self.models, s_grads)
             ],
@@ -248,13 +245,13 @@ class MultimodalCorrNMF:
         sigma_sq = self.models[0].sigma_sq
         s = -np.sum(
             [
-                corrnmf._hessian_u(
+                _utils_corrnmf.hessian_embedding(
                     u,
                     model.L,
                     model.alpha[index],
                     sigma_sq,
                     outer_prods_L,
-                    add_penalty_u=False,
+                    add_penalty=False,
                 )
                 for model, outer_prods_L in zip(self.models, outer_prods_Ls)
             ],
