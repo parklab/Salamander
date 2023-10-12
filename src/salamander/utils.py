@@ -1,11 +1,8 @@
-import warnings
-
 import numpy as np
 import pandas as pd
 from numba import njit
 from scipy.optimize import linear_sum_assignment
 from scipy.special import gammaln
-from scipy.stats import mannwhitneyu
 from sklearn.metrics import pairwise_distances
 
 EPSILON = np.finfo(np.float32).eps
@@ -182,46 +179,3 @@ def match_signatures_pair(
     reordered_indices = linear_sum_assignment(pdist)[1]
 
     return reordered_indices
-
-
-def differential_tail_test(a, b, percentile=90, alternative="two-sided"):
-    """
-    Test if distribution tails are different (pubmed: 18655712)
-
-    Input
-    ------
-    a, b : array-like
-        must be positive.
-
-    percentile : float
-        Percentile threshold above which data points are considered tails.
-
-    alternative : {'two-sided', 'less', 'greater'}
-        Defines the alternative hypothesis. For example, when set to 'greater',
-        the alternative hypothesis is that the tail of a is greater than the tail
-        of b.
-    """
-    a, b = np.array(a), np.array(b)
-
-    if len(a) != len(b):
-        warnings.warn(
-            "Lengths of a and b are different. "
-            "The differential tail test could lose power.",
-            UserWarning,
-        )
-
-    both = np.concatenate([a, b])
-    thresh = np.percentile(both, percentile)
-    za, zb = a * (a > thresh), b * (b > thresh)
-
-    # If za and zb contain identical values, e.g., both za and zb are all zeros.
-    if len(set(np.concatenate((za, zb)))) == 1:
-        if alternative == "two-sided":
-            return np.nan, 1.0
-
-        else:
-            return np.nan, 0.5
-
-    statistic, pvalue = mannwhitneyu(za, zb, alternative=alternative)
-
-    return statistic, pvalue
