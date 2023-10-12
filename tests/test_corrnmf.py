@@ -89,13 +89,8 @@ def surrogate_objective_init(path):
 
 
 @pytest.fixture
-def W_updated_Lee(path):
-    return np.load(f"{path}_W_Lee_updated.npy")
-
-
-@pytest.fixture
-def W_updated_surrogate(path):
-    return np.load(f"{path}_W_surrogate_updated.npy")
+def W_updated(path):
+    return np.load(f"{path}_W_updated.npy")
 
 
 @pytest.fixture
@@ -129,15 +124,9 @@ class TestCorrNMFDet:
             model_init._surrogate_objective_function(_p), surrogate_objective_init
         )
 
-    def test_update_W_Lee(self, model_init, _p, W_updated_Lee):
-        model_init.update_W = "1999-Lee"
-        model_init._update_W(_p)
-        assert np.allclose(model_init.W, W_updated_Lee)
-
-    def test_update_W_surrogate(self, model_init, _p, W_updated_surrogate):
-        model_init.update_W = "surrogate"
-        model_init._update_W(_p)
-        assert np.allclose(model_init.W, W_updated_surrogate)
+    def test_update_W_Lee(self, model_init, W_updated):
+        model_init._update_W()
+        assert np.allclose(model_init.W, W_updated)
 
     def test_update_alpha(self, model_init, alpha_updated):
         model_init._update_alpha()
@@ -152,7 +141,11 @@ class TestCorrNMFDet:
         assert np.allclose(model_init.L, L_updated)
 
     def test_update_U(self, model_init, _aux, U_updated):
+        print("\n\n", "BEFORE UPDATE", model_init.U, "\n\n")
         model_init._update_U(_aux)
+        print("UPDATED", model_init.U, "\n\n")
+        print("SOLUTION", U_updated, "\n\n")
+        print("DIFFERENCE", np.sum(np.abs(model_init.U - U_updated)))
         assert np.allclose(model_init.U, U_updated)
 
     def test_update_sigma_sq(self, model_init, sigma_sq_updated):

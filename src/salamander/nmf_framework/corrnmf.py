@@ -7,6 +7,7 @@ from copy import deepcopy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from numba import njit
 from scipy.spatial.distance import squareform
 from scipy.special import gammaln
 
@@ -30,6 +31,147 @@ from .initialization import (
 from .signature_nmf import SignatureNMF
 
 EPSILON = np.finfo(np.float32).eps
+
+
+@njit
+def update_alpha(X, L, U):
+    exp_LTU = np.exp(L.T @ U)
+    alpha = np.log(np.sum(X, axis=0)) - np.log(np.sum(exp_LTU, axis=0))
+    return alpha
+
+
+@njit
+def update_sigma_sq(L, U):
+    dim_embeddings, n_signatures = L.shape
+    n_samples = U.shape[1]
+    sum_norm_sigs = np.sum(L**2)
+    sum_norm_samples = np.sum(U**2)
+    sigma_sq = (sum_norm_sigs + sum_norm_samples) / (
+        dim_embeddings * (n_signatures + n_samples)
+    )
+    return sigma_sq
+
+
+@njit
+def update_W(X, W, H):
+    W *= (X / (W @ H)) @ H.T
+    W /= np.sum(W, axis=0)
+    W = W.clip(EPSILON)
+    return W
+
+
+@njit
+def update_p_unnormalized(W, H):
+    n_features, n_signatures = W.shape
+    n_samples = H.shape[1]
+    p = np.zeros((n_features, n_signatures, n_samples))
+
+    for v in range(n_features):
+        for k in range(n_signatures):
+            for d in range(n_samples):
+                p[v, k, d] = W[v, k] * H[k, d]
+
+    return p
+
+
+@njit
+def _objective_fun_l(l, U, alpha, sigma_sq, aux_row):
+    UTl = U.T.dot(l)
+    s = np.dot(aux_row, UTl)
+    s -= np.sum(np.exp(alpha + UTl))
+    s -= np.dot(l, l) / (2 * sigma_sq)
+
+    return -s
+
+
+@njit
+def _gradient_l(l, U, alpha, sigma_sq, s_grad):
+    s = -np.sum(np.exp(alpha + U.T.dot(l)) * U, axis=1)
+    s -= l / sigma_sq
+
+    return -(s_grad + s)
+
+
+@njit
+def _hessian_l(l, U, alpha, sigma_sq, outer_prods_U):
+    dim_embeddings, n_samples = U.shape
+    scalings = np.exp(alpha + U.T.dot(l))
+    s = np.zeros((dim_embeddings, dim_embeddings))
+
+    for m1 in range(dim_embeddings):
+        for m2 in range(dim_embeddings):
+            for d in range(n_samples):
+                s[m1, m2] -= scalings[d] * outer_prods_U[d, m1, m2]
+            if m1 == m2:
+                s[m1, m2] -= 1 / sigma_sq
+
+    return -s
+
+
+@njit
+def _objective_fun_u(
+    u: np.ndarray,
+    L: np.ndarray,
+    alpha: float,
+    sigma_sq: float,
+    aux_col: np.ndarray,
+    add_penalty_u=True,
+):
+    n_signatures = L.shape[1]
+    LTu = L.T.dot(u)
+    s = 0.0
+
+    # aux_col not contiguous:
+    # s = np.dot(aux_col, LTu) doesn't work
+    for k in range(n_signatures):
+        s += aux_col[k] * LTu[k]
+
+    s -= np.sum(np.exp(alpha + LTu))
+
+    if add_penalty_u:
+        s -= np.dot(u, u) / (2 * sigma_sq)
+
+    return -s
+
+
+@njit
+def _gradient_u(
+    u: np.ndarray,
+    L: np.ndarray,
+    alpha: float,
+    sigma_sq: float,
+    s_grad: np.ndarray,
+    add_penalty_u=True,
+):
+    s = -np.exp(alpha) * np.sum(np.exp(L.T.dot(u)) * L, axis=1)
+
+    if add_penalty_u:
+        s -= u / sigma_sq
+
+    return -(s_grad + s)
+
+
+@njit
+def _hessian_u(
+    u: np.ndarray,
+    L: np.ndarray,
+    alpha: float,
+    sigma_sq: float,
+    outer_prods_L: np.ndarray,
+    add_penalty_u=True,
+):
+    dim_embeddings, n_signatures = L.shape
+    scalings = np.exp(alpha + L.T.dot(u))
+    s = np.zeros((dim_embeddings, dim_embeddings))
+
+    for m1 in range(dim_embeddings):
+        for m2 in range(dim_embeddings):
+            for k in range(n_signatures):
+                s[m1, m2] -= scalings[k] * outer_prods_L[k, m1, m2]
+            if add_penalty_u and m1 == m2:
+                s[m1, m2] -= 1 / sigma_sq
+
+    return -s
 
 
 class CorrNMF(SignatureNMF):
@@ -134,7 +276,6 @@ class CorrNMF(SignatureNMF):
         n_signatures=1,
         dim_embeddings=None,
         init_method="nndsvd",
-        update_W="1999-Lee",
         min_iterations=500,
         max_iterations=10000,
         tol=1e-7,
@@ -158,11 +299,6 @@ class CorrNMF(SignatureNMF):
             "nndsvda", "nndsvdar" "random" and "separableNMF".
             See the initialization module for further details.
 
-        update_W: str, "1999-Lee" or "surrogate"
-            The signature matrix W can be inferred by either using the Lee and Seung
-            multiplicative update rules to optimize the objective function or by
-            maximizing the surrogate objective function.
-
         min_iterations: int
             The minimum number of iterations to perform during inference
 
@@ -180,8 +316,6 @@ class CorrNMF(SignatureNMF):
             dim_embeddings = n_signatures
 
         self.dim_embeddings = dim_embeddings
-        value_checker("update_W", update_W, ["1999-Lee", "surrogate"])
-        self.update_W = update_W
 
         # initialize data/fitting dependent attributes
         self.W = None
@@ -205,7 +339,7 @@ class CorrNMF(SignatureNMF):
         restructured and determined by the signature and sample embeddings.
         """
         exposures = pd.DataFrame(
-            np.exp(np.tile(self.alpha, (self.n_signatures, 1)) + self.L.T @ self.U),
+            np.exp(self.alpha + self.L.T @ self.U),
             index=self.signature_names,
             columns=self.sample_names,
         )
@@ -311,13 +445,8 @@ class CorrNMF(SignatureNMF):
         pass
 
     @abstractmethod
-    def _update_W(self, p):
-        """
-        Input:
-        ------
-        p: np.ndarray
-            The auxiliary parameters of CorrNMF
-        """
+    def _update_W(self):
+        pass
 
     @abstractmethod
     def _update_p(self):

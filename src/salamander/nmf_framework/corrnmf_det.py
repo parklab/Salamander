@@ -1,13 +1,17 @@
+# This implementation on helper functions in corrnmf.py.
+# In particular, functions with leading '_'' are accessed
+# pylint: disable=protected-access
+
 import numpy as np
 import pandas as pd
 from scipy import optimize
 
-from .corrnmf import CorrNMF
+from . import corrnmf
 
 EPSILON = np.finfo(np.float32).eps
 
 
-class CorrNMFDet(CorrNMF):
+class CorrNMFDet(corrnmf.CorrNMF):
     r"""
     The CorrNMFDet class implements the deterministic batch version of
     a variant of the correlated NMF (CorrNMF) algorithm devolped in
@@ -43,77 +47,47 @@ class CorrNMFDet(CorrNMF):
     """
 
     def _update_alpha(self):
-        exp_LTU = np.exp(self.L.T @ self.U)
-        self.alpha = np.log(np.sum(self.X, axis=0)) - np.log(np.sum(exp_LTU, axis=0))
+        self.alpha = corrnmf.update_alpha(self.X, self.L, self.U)
 
     def _update_sigma_sq(self):
-        sum_norm_sigs = np.sum(self.L**2)
-        sum_norm_samples = np.sum(self.U**2)
-
-        self.sigma_sq = (sum_norm_sigs + sum_norm_samples) / (
-            self.dim_embeddings * (self.n_signatures + self.n_samples)
-        )
+        self.sigma_sq = corrnmf.update_sigma_sq(self.L, self.U)
         self.sigma_sq = np.clip(self.sigma_sq, EPSILON, None)
 
-    def _update_W(self, p):
-        if self.update_W == "1999-Lee":
-            self.W = self.W * (
-                (self.X / (self.W @ self.exposures.values)) @ self.exposures.values.T
-            )
-
-        else:
-            self.W = np.einsum("vd,vkd->vk", self.X, p)
-
-        self.W /= np.sum(self.W, axis=0)
-        self.W = self.W.clip(EPSILON)
+    def _update_W(self):
+        self.W = corrnmf.update_W(self.X, self.W, self.exposures.values)
 
     def _update_p(self):
-        p = np.einsum("vk,kd->vkd", self.W, self.exposures.values)
+        p = corrnmf.update_p_unnormalized(self.W, self.exposures.values)
         p /= np.sum(p, axis=1, keepdims=True)
         p = p.clip(EPSILON)
-
         return p
-
-    def _objective_fun_l(self, l, aux_row):
-        UTl = self.U.T.dot(l)
-        s = np.dot(aux_row, UTl)
-        s -= np.sum(np.exp(self.alpha + UTl))
-        s -= np.dot(l, l) / (2 * self.sigma_sq)
-
-        return -s
-
-    def _gradient_l(self, l, s_grad):
-        s = -np.sum(np.exp(self.alpha + self.U.T.dot(l)) * self.U, axis=1)
-        s -= l / self.sigma_sq
-
-        return -(s_grad + s)
-
-    def _hessian_l(self, l, outer_prods_U):
-        scalings = np.exp(self.alpha + self.U.T.dot(l))
-        s = -np.einsum("D,Dmn->mn", scalings, outer_prods_U)
-        s -= np.diag(np.full(self.dim_embeddings, 1 / self.sigma_sq))
-
-        return -s
 
     def _update_l(self, index, aux_row, outer_prods_U):
         def objective_fun(l):
-            return self._objective_fun_l(l, aux_row)
+            return corrnmf._objective_fun_l(
+                l, self.U, self.alpha, self.sigma_sq, aux_row
+            )
 
         s_grad = np.sum(aux_row * self.U, axis=1)
 
         def gradient(l):
-            return self._gradient_l(l, s_grad)
+            return corrnmf._gradient_l(l, self.U, self.alpha, self.sigma_sq, s_grad)
 
         def hessian(l):
-            return self._hessian_l(l, outer_prods_U)
+            return corrnmf._hessian_l(
+                l, self.U, self.alpha, self.sigma_sq, outer_prods_U
+            )
 
-        self.L[:, index] = optimize.minimize(
+        l = optimize.minimize(
             fun=objective_fun,
             x0=self.L[:, index],
             method="Newton-CG",
             jac=gradient,
             hess=hessian,
         ).x
+        l[(0 < l) & (l < EPSILON)] = EPSILON
+        l[(-EPSILON < l) & (l < 0)] = -EPSILON
+        self.L[:, index] = l
 
     def _update_L(self, aux, outer_prods_U=None):
         r"""
@@ -131,49 +105,19 @@ class CorrNMFDet(CorrNMF):
         for k, aux_row in enumerate(aux):
             self._update_l(k, aux_row, outer_prods_U)
 
-        self.L[(0 < self.L) & (self.L < EPSILON)] = EPSILON
-        self.L[(-EPSILON < self.L) & (self.L < 0)] = -EPSILON
-
-    def _objective_fun_u(self, u, index, aux_col, add_penalty_u=True):
-        LTu = self.L.T.dot(u)
-        s = np.dot(aux_col, LTu)
-        s -= np.sum(np.exp(self.alpha[index] + LTu))
-
-        if add_penalty_u:
-            s -= np.dot(u, u) / (2 * self.sigma_sq)
-
-        return -s
-
-    def _gradient_u(self, u, index, s_grad, add_penalty_u=True):
-        s = -np.exp(self.alpha[index]) * np.sum(
-            np.exp(self.L.T.dot(u)) * self.L, axis=1
-        )
-
-        if add_penalty_u:
-            s -= u / self.sigma_sq
-
-        return -(s_grad + s)
-
-    def _hessian_u(self, u, index, outer_prods_L, add_penalty_u=True):
-        scalings = np.exp(self.alpha[index] + self.L.T.dot(u))
-        s = -np.einsum("K,Kmn->mn", scalings, outer_prods_L)
-
-        if add_penalty_u:
-            s -= np.diag(np.full(self.dim_embeddings, 1 / self.sigma_sq))
-
-        return -s
-
     def _update_u(self, index, aux_col, outer_prods_L):
+        alpha = self.alpha[index]
+
         def objective_fun(u):
-            return self._objective_fun_u(u, index, aux_col)
+            return corrnmf._objective_fun_u(u, self.L, alpha, self.sigma_sq, aux_col)
 
         s_grad = np.sum(aux_col * self.L, axis=1)
 
         def gradient(u):
-            return self._gradient_u(u, index, s_grad)
+            return corrnmf._gradient_u(u, self.L, alpha, self.sigma_sq, s_grad)
 
         def hessian(u):
-            return self._hessian_u(u, index, outer_prods_L)
+            return corrnmf._hessian_u(u, self.L, alpha, self.sigma_sq, outer_prods_L)
 
         u = optimize.minimize(
             fun=objective_fun,
@@ -275,7 +219,7 @@ class CorrNMFDet(CorrNMF):
             self._update_sigma_sq()
 
             if given_signatures is None:
-                self._update_W(p)
+                self._update_W()
 
             of_values.append(self.objective_function())
             prev_sof_value = sof_values[-1]

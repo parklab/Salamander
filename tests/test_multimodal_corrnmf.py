@@ -110,18 +110,9 @@ def surrogate_objective_init():
 
 
 @pytest.fixture
-def Ws_updated_Lee():
+def Ws_updated():
     return [
-        np.load(f"{PATH_TEST_DATA}/model{n}_W_Lee_updated.npy")
-        for n in range(N_MODALITIES)
-    ]
-
-
-@pytest.fixture
-def Ws_updated_surrogate():
-    return [
-        np.load(f"{PATH_TEST_DATA}/model{n}_W_surrogate_updated.npy")
-        for n in range(N_MODALITIES)
+        np.load(f"{PATH_TEST_DATA}/model{n}_W_updated.npy") for n in range(N_MODALITIES)
     ]
 
 
@@ -162,27 +153,12 @@ class TestMultimodalCorrNMFDet:
             surrogate_objective_init,
         )
 
-    def test_update_W_Lee(self, multi_model_init, _ps, Ws_updated_Lee):
-        for model in multi_model_init.models:
-            model.update_W = "1999-Lee"
-
+    def test_update_W(self, multi_model_init, Ws_updated):
         given_signatures = [None for _ in range(N_MODALITIES)]
-        multi_model_init._update_Ws(_ps, given_signatures)
+        multi_model_init._update_Ws(given_signatures)
 
-        for model, W_updated_Lee in zip(multi_model_init.models, Ws_updated_Lee):
-            assert np.allclose(model.W, W_updated_Lee)
-
-    def test_update_W_surrogate(self, multi_model_init, _ps, Ws_updated_surrogate):
-        for model in multi_model_init.models:
-            model.update_W = "surrogate"
-
-        given_signatures = [None for _ in range(N_MODALITIES)]
-        multi_model_init._update_Ws(_ps, given_signatures)
-
-        for model, W_updated_surrogate in zip(
-            multi_model_init.models, Ws_updated_surrogate
-        ):
-            assert np.allclose(model.W, W_updated_surrogate)
+        for model, W_updated in zip(multi_model_init.models, Ws_updated):
+            assert np.allclose(model.W, W_updated)
 
     def test_update_alpha(self, multi_model_init, alphas_updated):
         multi_model_init._update_alphas()

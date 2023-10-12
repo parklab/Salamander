@@ -29,6 +29,7 @@ from ..plot import (
     umap_2d,
 )
 from ..utils import type_checker, value_checker
+from . import corrnmf
 from .corrnmf_det import CorrNMFDet
 
 EPSILON = np.finfo(np.float32).eps
@@ -41,7 +42,6 @@ class MultimodalCorrNMF:
         ns_signatures=None,
         dim_embeddings=None,
         init_method="nndsvd",
-        update_W="1999-Lee",
         min_iterations=500,
         max_iterations=10000,
         tol=1e-7,
@@ -62,7 +62,7 @@ class MultimodalCorrNMF:
         self.max_iterations = max_iterations
         self.tol = tol
         self.models = [
-            CorrNMFDet(n_signatures, dim_embeddings, init_method, update_W)
+            CorrNMFDet(n_signatures, dim_embeddings, init_method)
             for n_signatures in ns_signatures
         ]
 
@@ -197,46 +197,70 @@ class MultimodalCorrNMF:
         for model in self.models:
             model.sigma_sq = sigma_sq
 
-    def _update_Ws(self, ps, given_signatures):
-        for model, p, given_sigs in zip(self.models, ps, given_signatures):
+    def _update_Ws(self, given_signatures):
+        for model, given_sigs in zip(self.models, given_signatures):
             if given_sigs is None:
-                model._update_W(p)
+                model._update_W()
 
     def _update_ps(self):
         return [model._update_p() for model in self.models]
 
     def _objective_fun_u(self, u, index, aux_cols):
+        sigma_sq = self.models[0].sigma_sq
         s = -np.sum(
             [
-                model._objective_fun_u(u, index, aux_col, add_penalty_u=False)
+                corrnmf._objective_fun_u(
+                    u,
+                    model.L,
+                    model.alpha[index],
+                    sigma_sq,
+                    aux_col,
+                    add_penalty_u=False,
+                )
                 for model, aux_col in zip(self.models, aux_cols)
             ]
         )
-        s -= np.dot(u, u) / (2 * self.models[0].sigma_sq)
+        s -= np.dot(u, u) / (2 * sigma_sq)
 
         return -s
 
     def _gradient_u(self, u, index, s_grads):
+        sigma_sq = self.models[0].sigma_sq
         s = -np.sum(
             [
-                model._gradient_u(u, index, s_grad, add_penalty_u=False)
+                corrnmf._gradient_u(
+                    u,
+                    model.L,
+                    model.alpha[index],
+                    sigma_sq,
+                    s_grad,
+                    add_penalty_u=False,
+                )
                 for model, s_grad in zip(self.models, s_grads)
             ],
             axis=0,
         )
-        s -= u / self.models[0].sigma_sq
+        s -= u / sigma_sq
 
         return -s
 
     def _hessian_u(self, u, index, outer_prods_Ls):
+        sigma_sq = self.models[0].sigma_sq
         s = -np.sum(
             [
-                model._hessian_u(u, index, outer_prods_L, add_penalty_u=False)
+                corrnmf._hessian_u(
+                    u,
+                    model.L,
+                    model.alpha[index],
+                    sigma_sq,
+                    outer_prods_L,
+                    add_penalty_u=False,
+                )
                 for model, outer_prods_L in zip(self.models, outer_prods_Ls)
             ],
             axis=0,
         )
-        s -= np.diag(np.full(self.dim_embeddings, 1 / self.models[0].sigma_sq))
+        s -= np.diag(np.full(self.dim_embeddings, 1 / sigma_sq))
 
         return -s
 
@@ -394,7 +418,7 @@ class MultimodalCorrNMF:
             ps = self._update_ps()
             self._update_LsU(ps, given_signature_embeddings, given_sample_embeddings)
             self._update_sigma_sq()
-            self._update_Ws(ps, given_signatures)
+            self._update_Ws(given_signatures)
 
             of_values.append(self.objective_function())
             prev_sof_value = sof_values[-1]

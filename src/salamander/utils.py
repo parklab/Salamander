@@ -80,16 +80,16 @@ def kl_divergence(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
     """
     V, D = X.shape
     WH = W @ H
-    kl_divergence = 0.0
+    result = 0.0
 
     for v in range(V):
         for d in range(D):
             if X[v, d] != 0:
-                kl_divergence += X[v, d] * np.log(X[v, d] / WH[v, d])
-                kl_divergence -= X[v, d]
-            kl_divergence += WH[v, d]
+                result += X[v, d] * np.log(X[v, d] / WH[v, d])
+                result -= X[v, d]
+            result += WH[v, d]
 
-    return kl_divergence
+    return result
 
 
 def samplewise_kl_divergence(X, W, H):
@@ -111,24 +111,38 @@ def samplewise_kl_divergence(X, W, H):
     return errors
 
 
+@njit(fastmath=True)
+def _poisson_llh_wo_factorial(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
+    """
+    The Poisson log-likelihood generalized to X, W and H having
+    non-negative real numbers without the summands involving the log-factorial
+    of elements of X.
+    Note:
+        scipy-special, which is required to computed the log-factorial,
+        is not supported by numba.
+    """
+    V, D = X.shape
+    WH = W @ H
+    result = 0.0
+
+    for v in range(V):
+        for d in range(D):
+            if WH[v, d] != 0:
+                result += X[v, d] * np.log(WH[v, d])
+            result -= WH[v, d]
+
+    return result
+
+
 def poisson_llh(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
     """
     The Poisson log-likelihood generalized to X, W and H having
     non-negative real numbers.
     """
-    WH_data = W @ H
-    indices = WH_data.nonzero()
-    WH_data = WH_data[indices]
-    X_data = X[indices]
+    result = _poisson_llh_wo_factorial(X, W, H)
+    result -= np.sum(gammaln(1 + X))
 
-    s1 = np.dot(X_data, np.log(WH_data))
-    # fast np.sum(W @ H)
-    s2 = -np.dot(np.sum(W, axis=0), np.sum(H, axis=1))
-    s3 = -np.sum(gammaln(1 + X))
-
-    llh = s1 + s2 + s3
-
-    return llh
+    return result
 
 
 def normalize_WH(W, H):
