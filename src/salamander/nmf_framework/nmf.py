@@ -1,12 +1,9 @@
-import warnings
 from abc import abstractmethod
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ..plot import pca_2d, scatter_1d, scatter_2d, tsne_2d, umap_2d
-from ..utils import match_signatures_pair, normalize_WH, value_checker
+from ..utils import match_signatures_pair, normalize_WH
 from .initialization import (
     init_custom,
     init_flat,
@@ -249,98 +246,15 @@ class NMF(SignatureNMF):
 
         return reordered_indices
 
-    def _get_embedding_annotations(self, annotate_samples) -> np.ndarray:
-        # Only annotate with the first 20 characters of names
-        annotations = np.empty(self.n_samples, dtype="U20")
-
-        if annotate_samples:
-            annotations[:] = self.sample_names
-
-        return annotations
-
-    def plot_embeddings(
-        self,
-        method="umap",
-        annotate_samples=False,
-        annotation_kwargs=None,
-        ax=None,
-        outfile=None,
-        **kwargs,
-    ):
+    def _get_embedding_data(self):
         """
-        Plot the sample embeddings using the exposure matrix H.
-        If the embedding dimension is set to two, the embeddings will
-        be plotted directly, ignoring the method chosen.
-        See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
-
-        Input:
-        ------
-        methdod: str
-            Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
-            will be applied to plot signature and sample embeddings in 2D.
-
-        **kwargs:
-            Arguments to be passed to scatter_2d, tsne_2d, pca_2d or umap_2d
+        In most NMF models like KL-NMF or mvNMF, the data for the embedding plot
+        are just the (transposed) exposures.
         """
-        value_checker("method", method, ["pca", "tsne", "umap"])
+        return self.H.T.copy()
 
-        data = self.H.T
-        annotations = self._get_embedding_annotations(annotate_samples)
-
-        if self.n_signatures in [1, 2]:
-            warnings.warn(
-                f"The number of signatures is {self.n_signatures}. "
-                f"The method argument '{method}' will be ignored "
-                "and the embeddings are plotted directly.",
-                UserWarning,
-            )
-
-        if self.n_signatures == 1:
-            ax = scatter_1d(
-                data[:, 0],
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        elif self.n_signatures == 2:
-            ax = scatter_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        elif method == "tsne":
-            ax = tsne_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        elif method == "pca":
-            ax = pca_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        else:
-            ax = umap_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        if outfile is not None:
-            plt.savefig(outfile, bbox_inches="tight")
-
-        return ax
+    def _get_default_embedding_annotations(self) -> np.ndarray:
+        """
+        The embedding plot defaults to no annotations.
+        """
+        return np.empty(self.n_samples, dtype=str)

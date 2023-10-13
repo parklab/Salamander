@@ -4,7 +4,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ..plot import corr_plot, exposures_plot, salamander_style, signatures_plot
+from ..plot import (
+    corr_plot,
+    embeddings_plot,
+    exposures_plot,
+    salamander_style,
+    signatures_plot,
+)
 from ..utils import type_checker, value_checker
 
 
@@ -414,8 +420,90 @@ class SignatureNMF(ABC):
         return clustergrid
 
     @abstractmethod
-    def plot_embeddings(self):
+    def _get_embedding_data(self) -> np.ndarray:
         """
-        Plot the sample (and potentially the signature) embeddings in 2D.
+        Get the data points for the dimensionality reduction / embedding plot.
+        One data point corresponds to a row of the embedding data.
+        Usually, these are the transposed exposures.
         """
-        pass
+
+    @abstractmethod
+    def _get_default_embedding_annotations(self) -> np.ndarray:
+        """
+        Get the annotations of the data points in the embedding plot.
+        """
+
+    def plot_embeddings(
+        self,
+        method="umap",
+        normalize=False,
+        annotations=None,
+        annotation_kwargs=None,
+        ax=None,
+        outfile=None,
+        **kwargs,
+    ):
+        """
+        Plot a dimensionality reduction of the exposure representation.
+        In most NMF algorithms, this is just the exposures of the samples.
+        In CorrNMF, the exposures matrix is refactored, and there are both
+        sample and signature exposures in a shared embedding space.
+
+        If the embedding dimension is one or two, the embeddings are be plotted
+        directly, ignoring the chosen method.
+        See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
+
+        Parameters
+        ----------
+        method : str, default='umap'
+            Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
+            will be applied to plot the data in 2D space.
+
+        normalize : bool, default=False
+            If True, normalize the data before applying the dimensionality reduction.
+
+        annotations : list[str], default=None
+            Annotations per data point, e.g. the sample names. If None,
+            the algorithm-specific default annotations are used.
+            For example, CorrNMF annotates the signature embeddings by default.
+            Note that there are 'n_signatures' + 'n_samples' data points in CorrNMF,
+            i.e. the first 'n_signatures' elements in 'annotations'
+            are the signature annotations, not any sample annotations.
+
+        annotation_kwargs : dict, default=None
+            keyword arguments to pass to matplotlibs plt.txt()
+
+        ax : matplotlib.axes.Axes, default=None
+            Pre-existing axes for the plot. Otherwise, an axes is created.
+
+        outfile : str, default=None
+            If not None, the figure will be saved in the specified file path.
+
+        **kwargs :
+            keyword arguments to pass to seaborn's scatterplot
+
+        Returns
+        -------
+        ax : matplotlib.axes.Axes
+            The matplotlib axes containing the plot.
+        """
+        # one data point corresponds to a row of embedding_data
+        embedding_data = self._get_embedding_data()
+
+        if annotations is None:
+            annotations = self._get_default_embedding_annotations()
+
+        ax = embeddings_plot(
+            embedding_data,
+            method,
+            normalize,
+            annotations,
+            annotation_kwargs,
+            ax,
+            **kwargs,
+        )
+
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches="tight")
+
+        return ax

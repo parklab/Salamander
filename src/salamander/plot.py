@@ -14,7 +14,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 from .consts import COLORS_INDEL83, COLORS_SBS96, INDEL_TYPES_83, SBS_TYPES_96
-from .utils import match_to_catalog
+from .utils import match_to_catalog, value_checker
 
 
 def salamander_style(func):
@@ -37,7 +37,6 @@ def salamander_style(func):
             "xtick.labelsize": 12,
             "ytick.labelsize": 12,
         }
-
         mpl.rcParams.update(params)
 
         return func(*args, **kwargs)
@@ -181,6 +180,86 @@ def umap_2d(
 
     if annotations is not None:
         _annotate_plot(ax, data_projected, annotations, **annotation_kwargs)
+
+    return ax
+
+
+@salamander_style
+def embeddings_plot(
+    data: np.ndarray,
+    method="umap",
+    normalize=False,
+    annotations=None,
+    annotation_kwargs=None,
+    ax=None,
+    **kwargs,
+):
+    """
+    The rows (!) of 'data' are assumed to be the single data points.
+    """
+    value_checker("method", method, ["pca", "tsne", "umap"])
+
+    if normalize:
+        data /= data.sum(axis=1)[:, np.newaxis]
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(6, 6))
+
+    annotation_kwargs = {} if annotation_kwargs is None else annotation_kwargs.copy()
+    n_dimensions = data.shape[0]
+
+    if n_dimensions in [1, 2]:
+        warnings.warn(
+            f"The dimension of the data points is {n_dimensions}. "
+            f"The method argument '{method}' will be ignored "
+            "and the embeddings are plotted directly.",
+            UserWarning,
+        )
+
+    if n_dimensions == 1:
+        ax = scatter_1d(
+            data[:, 0],
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
+
+    elif n_dimensions == 2:
+        ax = scatter_2d(
+            data,
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
+
+    elif method == "tsne":
+        ax = tsne_2d(
+            data,
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
+
+    elif method == "pca":
+        ax = pca_2d(
+            data,
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
+
+    else:
+        ax = umap_2d(
+            data,
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
 
     return ax
 

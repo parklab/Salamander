@@ -10,24 +10,13 @@ embeddings for all modalities in the same embedding space.
 # are accessed.
 # pylint: disable=protected-access
 
-import warnings
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import optimize
 from scipy.spatial.distance import squareform
 
-from ..plot import (
-    corr_plot,
-    pca_2d,
-    salamander_style,
-    scatter_1d,
-    scatter_2d,
-    signatures_plot,
-    tsne_2d,
-    umap_2d,
-)
+from ..plot import corr_plot, embeddings_plot, salamander_style, signatures_plot
 from ..utils import type_checker, value_checker
 from . import _utils_corrnmf
 from .corrnmf_det import CorrNMFDet
@@ -186,8 +175,8 @@ class MultimodalCorrNMF:
             model._update_alpha()
 
     def _update_sigma_sq(self):
-        embeddings = np.concatenate([model.L for model in self.models], axis=1)
-        embeddings = np.concatenate([embeddings, self.models[0].U], axis=1)
+        Ls = np.concatenate([model.L for model in self.models], axis=1)
+        embeddings = np.concatenate([Ls, self.models[0].U], axis=1)
         sigma_sq = np.mean(embeddings**2)
         sigma_sq = np.clip(sigma_sq, EPSILON, None)
 
@@ -564,28 +553,22 @@ class MultimodalCorrNMF:
 
         return clustergrid
 
-    def _get_embedding_annotations(self, annotate_signatures, annotate_samples):
+    def _get_default_embedding_annotations(self):
         # Only annotate with the first 20 characters of names
         annotations = np.empty(np.sum(self.ns_signatures) + self.n_samples, dtype="U20")
-
-        if annotate_signatures:
-            signature_names = np.concatenate(
-                [model.signature_names for model in self.models]
-            )
-            annotations[: len(signature_names)] = signature_names
-
-        if annotate_samples:
-            annotations[-self.n_samples :] = self.models[0].sample_names
+        signature_names = np.concatenate(
+            [model.signature_names for model in self.models]
+        )
+        annotations[: len(signature_names)] = signature_names
 
         return annotations
 
-    @salamander_style
     def plot_embeddings(
         self,
         method="umap",
-        annotate_signatures=True,
-        annotate_samples=False,
         normalize=False,
+        annotations=None,
+        annotation_kwargs=None,
         ax=None,
         outfile=None,
         **kwargs,
@@ -595,55 +578,55 @@ class MultimodalCorrNMF:
         is two, the embeddings will be plotted directly, ignoring the chosen method.
         See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
 
-        Input:
-        ------
-        methdod: str
+        Parameters
+        ----------
+        method : str, default='umap'
             Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
             will be applied to plot the signature and sample embeddings in 2D space.
 
-        annotate_signatures: bool
+        normalize : bool, default=False
+            If True, normalize the embeddings before applying the dimensionality
+            reduction.
 
-        annotate_samples: bool
+        annotations : list[str], default=None
+            Annotations per data point, e.g. the sample names. If None,
+            all signatures are annotated.
+            Note that there are sum('ns_signatures') + 'n_samples' data points,
+            i.e. the first sum('ns_signatures') elements in 'annotations'
+            are the signature annotations, not any sample annotations.
 
-        normalize: bool
-            Normalize the embeddings before applying the dimensionality reduction.
+        annotation_kwargs : dict, default=None
+            keyword arguments to pass to matplotlibs plt.txt()
 
-        *args, **kwargs:
-            arguments to be passed to scatter_2d, tsne_2d, pca_2d or umap_2d
+        ax : matplotlib.axes.Axes, default=None
+            Pre-existing axes for the plot. Otherwise, an axes is created.
+
+        outfile : str, default=None
+            If not None, the figure will be saved in the specified file path.
+
+        **kwargs :
+            keyword arguments to pass to seaborn's scatterplot
+
+        Returns
+        -------
+        ax : matplotlib.axes.Axes
+            The matplotlib axes containing the plot.
         """
-        value_checker("method", method, ["pca", "tsne", "umap"])
-        annotations = self._get_embedding_annotations(
-            annotate_signatures, annotate_samples
-        )
-
         Ls = np.concatenate([model.L for model in self.models], axis=1)
-        data = np.concatenate([Ls, self.models[0].U], axis=1).T
+        embedding_data = np.concatenate([Ls, self.models[0].U], axis=1).T.copy()
 
-        if normalize:
-            data /= np.sum(data, axis=0)
+        if annotations is None:
+            annotations = self._get_default_embedding_annotations()
 
-        if self.dim_embeddings in [1, 2]:
-            warnings.warn(
-                f"The embedding dimension is {self.dim_embeddings}. "
-                f"The method argument '{method}' will be ignored "
-                "and the embeddings are plotted directly.",
-                UserWarning,
-            )
-
-        if self.dim_embeddings == 1:
-            ax = scatter_1d(data[:, 0], annotations=annotations, ax=ax, **kwargs)
-
-        elif self.dim_embeddings == 2:
-            ax = scatter_2d(data, annotations=annotations, ax=ax, **kwargs)
-
-        elif method == "tsne":
-            ax = tsne_2d(data, annotations=annotations, ax=ax, **kwargs)
-
-        elif method == "pca":
-            ax = pca_2d(data, annotations=annotations, ax=ax, **kwargs)
-
-        else:
-            ax = umap_2d(data, annotations=annotations, ax=ax, **kwargs)
+        ax = embeddings_plot(
+            embedding_data,
+            method,
+            normalize,
+            annotations,
+            annotation_kwargs,
+            ax,
+            **kwargs,
+        )
 
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")

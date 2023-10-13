@@ -1,13 +1,10 @@
-import warnings
 from abc import abstractmethod
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import squareform
 from scipy.special import gammaln
 
-from ..plot import pca_2d, scatter_1d, scatter_2d, tsne_2d, umap_2d
 from ..utils import (
     kl_divergence,
     match_signatures_pair,
@@ -15,7 +12,6 @@ from ..utils import (
     samplewise_kl_divergence,
     shape_checker,
     type_checker,
-    value_checker,
 )
 from .initialization import (
     init_custom,
@@ -483,114 +479,19 @@ class CorrNMF(SignatureNMF):
 
         return reordered_indices
 
-    def _get_embedding_annotations(self, annotate_signatures, annotate_samples):
+    def _get_embedding_data(self) -> np.ndarray:
+        """
+        In CorrNMF, the data for the embedding plot are the (transpoed) signature and
+        sample embeddings.
+        """
+        return np.concatenate([self.L, self.U], axis=1).T.copy()
+
+    def _get_default_embedding_annotations(self) -> np.ndarray:
+        """
+        The embedding plot defaults to annotating the signature embeddings.
+        """
         # Only annotate with the first 20 characters of names
         annotations = np.empty(self.n_signatures + self.n_samples, dtype="U20")
-
-        if annotate_signatures:
-            annotations[: self.n_signatures] = self.signature_names
-
-        if annotate_samples:
-            annotations[-self.n_samples :] = self.sample_names
+        annotations[: self.n_signatures] = self.signature_names
 
         return annotations
-
-    def plot_embeddings(
-        self,
-        method="umap",
-        annotate_signatures=True,
-        annotate_samples=False,
-        annotation_kwargs=None,
-        normalize=False,
-        ax=None,
-        outfile=None,
-        **kwargs,
-    ):
-        """
-        Plot the signature and sample embeddings. If the embedding dimension is two,
-        the embeddings will be plotted directly, ignoring the chosen method.
-        See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
-
-        Input:
-        ------
-        methdod: str
-            Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
-            will be applied to plot the signature and sample embeddings in 2D.
-
-        annotate_signatures: bool
-
-        annotate_samples: bool
-
-        normalize: bool
-            Normalize the embeddings before applying the dimensionality reduction.
-
-        *args, **kwargs:
-            arguments to be passed to scatter_2d, tsne_2d, pca_2d or umap_2d
-        """
-        value_checker("method", method, ["pca", "tsne", "umap"])
-        annotations = self._get_embedding_annotations(
-            annotate_signatures, annotate_samples
-        )
-
-        data = np.concatenate([self.L, self.U], axis=1).T
-
-        if normalize:
-            data /= np.sum(data, axis=0)
-
-        if self.dim_embeddings in [1, 2]:
-            warnings.warn(
-                f"The embedding dimension is {self.dim_embeddings}. "
-                f"The method argument '{method}' will be ignored "
-                "and the embeddings are plotted directly.",
-                UserWarning,
-            )
-
-        if self.dim_embeddings == 1:
-            ax = scatter_1d(
-                data[:, 0],
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        elif self.dim_embeddings == 2:
-            ax = scatter_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        elif method == "tsne":
-            ax = tsne_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        elif method == "pca":
-            ax = pca_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        else:
-            ax = umap_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        if outfile is not None:
-            plt.savefig(outfile, bbox_inches="tight")
-
-        return ax
