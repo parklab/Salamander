@@ -142,6 +142,7 @@ def poisson_llh(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
     return result
 
 
+@njit
 def normalize_WH(W, H):
     normalization_factor = np.sum(W, axis=0)
     return W / normalization_factor, H * normalization_factor[:, None]

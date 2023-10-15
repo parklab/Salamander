@@ -40,7 +40,7 @@ def model_init(model, counts, W_init, H_init):
     model.H = H_init
     model.lam = 1.0
     model.delta = 1.0
-    model.gamma = 1.0
+    model._gamma = 1.0
     return model
 
 
@@ -63,8 +63,8 @@ class TestMVNMF:
     def test_objective_function(self, model_init, objective_init):
         assert np.allclose(model_init.objective_function(), objective_init)
 
-    def test_update_W(self, model_init, objective_init, W_updated):
-        model_init._update_W(objective_init)
+    def test_update_W(self, model_init, W_updated):
+        model_init._update_W()
         assert np.allclose(model_init.W, W_updated)
 
     def test_update_H(self, model_init, H_updated):
