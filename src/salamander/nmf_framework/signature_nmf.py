@@ -145,7 +145,7 @@ class SignatureNMF(ABC):
         value_checker("init_method", init_method, init_methods)
 
         self.n_signatures = n_signatures
-        self.signature_names = np.array([f"Sig{k+1}" for k in range(n_signatures)])
+        self.signature_names = None
         self.init_method = init_method
         self.min_iterations = min_iterations
         self.max_iterations = max_iterations
@@ -154,6 +154,7 @@ class SignatureNMF(ABC):
         # initialize data/fitting dependent attributes
         self.X = None
         self.n_features = 0
+        self.n_given_signatures = 0
         self.n_samples = 0
         self.mutation_types = np.empty(0, dtype=str)
         self.sample_names = np.empty(0, dtype=str)
@@ -240,21 +241,23 @@ class SignatureNMF(ABC):
         """
         Check if the given signatures are compatible with the
         number of signatures of the algorithm and the
-        mutation types of the input data and.
+        mutation types of the input data.
 
         given_signatures: pd.DataFrame
             Known signatures that should be fixed by the algorithm.
+            The number of known signatures can be less or equal to the
+            number of signatures specified in the algorithm instance.
         """
         type_checker("given_signatures", given_signatures, pd.DataFrame)
         given_mutation_types = given_signatures.index.to_numpy(dtype=str)
         compatible = (
             np.array_equal(given_mutation_types, self.mutation_types)
-            and given_signatures.shape[1] == self.n_signatures
+            and given_signatures.shape[1] <= self.n_signatures
         )
 
         if not compatible:
             raise ValueError(
-                f"You have to provide {self.n_signatures} signatures with "
+                f"You have to provide at most {self.n_signatures} signatures with "
                 f"mutation types matching to your data."
             )
 
@@ -271,7 +274,6 @@ class SignatureNMF(ABC):
             decompose the mutation count matrix X into a signature matrix W and
             an exposure matrix H, both W and H have to be initialized.
         """
-        pass
 
     def _setup_data_parameters(self, data: pd.DataFrame):
         """
@@ -301,13 +303,11 @@ class SignatureNMF(ABC):
             The named mutation count data of shape (n_features, n_samples).
 
         given_signatures: pd.DataFrame, by default None
-            In the case of refitting, 'given_signatures'
-            are the a priori known signatures.
-            The number of signatures has to match to the NMF algorithm
-            instance and the mutation type names have to match to the names
-            of the mutation count data.
+            A priori known signatures. The number of given signatures has
+            to be less or equal to the number of signatures of NMF
+            algorithm instance, and the mutation type names have to match
+            the mutation types of the count data.
         """
-        pass
 
     @salamander_style
     def plot_signatures(
@@ -321,11 +321,6 @@ class SignatureNMF(ABC):
     ):
         """
         Plot the signatures, see plot.py for the implementation of signatures_plot.
-
-        Input:
-        ------
-        **kwargs:
-            arguments to be passed to signatures_plot
         """
         axes = signatures_plot(
             self.signatures,
@@ -355,11 +350,6 @@ class SignatureNMF(ABC):
         """
         Visualize the exposures as a stacked bar chart,
         see plot.py for the implementation.
-
-        Input:
-        ------
-        **kwargs:
-            arguments to be passed to exposure_plot
         """
         ax = exposures_plot(
             exposures=self.exposures,
@@ -383,7 +373,6 @@ class SignatureNMF(ABC):
         Every child class of SignatureNMF has to implement a function that
         returns the signature correlation matrix as a pandas dataframe.
         """
-        pass
 
     @property
     @abstractmethod
@@ -392,7 +381,6 @@ class SignatureNMF(ABC):
         Every child class of SignatureNMF has to implement a function that
         returns the sample correlation matrix as a pandas dataframe.
         """
-        pass
 
     def plot_correlation(self, data="signatures", annot=False, outfile=None, **kwargs):
         """

@@ -1,4 +1,4 @@
-# This implementation on helper functions in corrnmf.py.
+# This implementation relies on helper functions in corrnmf.py.
 # In particular, functions with leading '_'' are accessed
 # pylint: disable=protected-access
 
@@ -7,6 +7,7 @@ import pandas as pd
 from scipy import optimize
 
 from . import _utils_corrnmf
+from ._utils_klnmf import update_W
 from .corrnmf import CorrNMF
 
 EPSILON = np.finfo(np.float32).eps
@@ -56,7 +57,9 @@ class CorrNMFDet(CorrNMF):
         self.sigma_sq = np.clip(self.sigma_sq, EPSILON, None)
 
     def _update_W(self):
-        self.W = _utils_corrnmf.update_W(self.X, self.W, self.exposures.values)
+        self.W = update_W(
+            self.X, self.W, self.exposures.values, self.n_given_signatures
+        )
 
     def _update_p(self):
         p = _utils_corrnmf.update_p_unnormalized(self.W, self.exposures.values)
@@ -203,6 +206,11 @@ class CorrNMFDet(CorrNMF):
 
         verbose: int
             Every 100th iteration number will be printed when set unequal to zero.
+
+        Returns
+        -------
+        self : object
+            Returns the instance itself.
         """
         self._setup_data_parameters(data)
         self._initialize(
@@ -228,7 +236,7 @@ class CorrNMFDet(CorrNMF):
             self._update_LU(p, given_signature_embeddings, given_sample_embeddings)
             self._update_sigma_sq()
 
-            if given_signatures is None:
+            if self.n_given_signatures < self.n_signatures:
                 self._update_W()
 
             of_values.append(self.objective_function())

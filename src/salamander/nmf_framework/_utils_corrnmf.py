@@ -34,42 +34,6 @@ def update_alpha(X: np.ndarray, L: np.ndarray, U: np.ndarray) -> np.ndarray:
 
 
 @njit
-def update_W(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> np.ndarray:
-    """
-    Compute the new signatures according to the update rule of NMF with
-    the generalized Kullback-Leibler divergence. An additional normalization
-    step is performed to guarantee that the signatures are probability distributions
-    over the mutation types.
-
-    Parameters
-    ----------
-    X : np.ndarray of shape (n_features, n_samples)
-        data matrix
-
-    W : np.ndarray of shape (n_features, n_signatures)
-        signature matrix
-
-    H : np.ndarray of shape (n_signatures, n_samples)
-        exposure matrix
-
-    Returns
-    -------
-    W : np.ndarray of shape (n_features, n_signatures)
-        updated signature matrix
-
-    References
-    ----------
-    D. Lee, H. Seung: Algorithms for Non-negative Matrix Factorization
-    - Advances in neural information processing systems, 2000
-    https://proceedings.neurips.cc/paper_files/paper/2000/file/f9d1152547c0bde01830b7e8bd60024c-Paper.pdf
-    """
-    W *= (X / (W @ H)) @ H.T
-    W /= np.sum(W, axis=0)
-    W = W.clip(EPSILON)
-    return W
-
-
-@njit
 def update_p_unnormalized(W: np.ndarray, H: np.ndarray) -> np.ndarray:
     """
     Compute the new auxiliary parameters according to the update rule of CorrNMF.

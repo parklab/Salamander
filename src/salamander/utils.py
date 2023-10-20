@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from numba import njit
 from scipy.optimize import linear_sum_assignment
-from scipy.special import gammaln
 from sklearn.metrics import pairwise_distances
 
 EPSILON = np.finfo(np.float32).eps
@@ -67,79 +66,6 @@ def value_checker(arg_name: str, arg, allowed_values):
         raise ValueError(
             f"The value of '{arg_name}' has to be one of {allowed_values}."
         )
-
-
-@njit(fastmath=True)
-def kl_divergence(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
-    r"""
-    The generalized Kullback-Leibler divergence
-    D_KL(X || WH) = \sum_vd X_vd * ln(X_vd / (WH)_vd) - \sum_vd X_vd + \sum_vd (WH)_vd.
-    """
-    V, D = X.shape
-    WH = W @ H
-    result = 0.0
-
-    for v in range(V):
-        for d in range(D):
-            if X[v, d] != 0:
-                result += X[v, d] * np.log(X[v, d] / WH[v, d])
-                result -= X[v, d]
-            result += WH[v, d]
-
-    return result
-
-
-def samplewise_kl_divergence(X, W, H):
-    """
-    Per sample generalizedKullback-Leibler divergence D_KL(x || Wh).
-    """
-    X_data = np.copy(X).astype(float)
-    indices = X == 0
-    X_data[indices] = EPSILON
-    WH_data = W @ H
-    WH_data[indices] = EPSILON
-
-    s1 = np.einsum("vd,vd->d", X_data, np.log(X_data / WH_data))
-    s2 = -np.sum(X, axis=0)
-    s3 = np.dot(H.T, np.sum(W, axis=0))
-
-    errors = s1 + s2 + s3
-
-    return errors
-
-
-@njit(fastmath=True)
-def _poisson_llh_wo_factorial(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
-    """
-    The Poisson log-likelihood generalized to X, W and H having
-    non-negative real numbers without the summands involving the log-factorial
-    of elements of X.
-    Note:
-        scipy-special, which is required to computed the log-factorial,
-        is not supported by numba.
-    """
-    V, D = X.shape
-    WH = W @ H
-    result = 0.0
-
-    for v in range(V):
-        for d in range(D):
-            if WH[v, d] != 0:
-                result += X[v, d] * np.log(WH[v, d])
-            result -= WH[v, d]
-
-    return result
-
-
-def poisson_llh(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
-    """
-    The Poisson log-likelihood generalized to X, W and H having
-    non-negative real numbers.
-    """
-    result = _poisson_llh_wo_factorial(X, W, H)
-    result -= np.sum(gammaln(1 + X))
-
-    return result
 
 
 @njit

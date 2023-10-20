@@ -184,6 +184,9 @@ class NMF(SignatureNMF):
         """
         if given_signatures is not None:
             self._check_given_signatures(given_signatures)
+            self.n_given_signatures = len(given_signatures.columns)
+        else:
+            self.n_given_signatures = 0
 
         init_kwargs = {} if init_kwargs is None else init_kwargs.copy()
 
@@ -205,8 +208,20 @@ class NMF(SignatureNMF):
             self.W = init_separableNMF(self.X, self.n_signatures)
 
         if given_signatures is not None:
-            self.W = given_signatures.copy().values
-            self.signature_names = given_signatures.columns.to_numpy(dtype=str)
+            self.W[:, : self.n_given_signatures] = given_signatures.copy().values
+            given_signatures_names = given_signatures.columns.to_numpy(dtype=str)
+            n_new_signatures = self.n_signatures - self.n_given_signatures
+            new_signatures_names = np.array(
+                [f"Sig{k+1}" for k in range(n_new_signatures)]
+            )
+            self.signature_names = np.concatenate(
+                [given_signatures_names, new_signatures_names]
+            )
+
+        else:
+            self.signature_names = np.array(
+                [f"Sig{k+1}" for k in range(self.n_signatures)]
+            )
 
         if not hasattr(self, "H"):
             _, self.H = init_random(self.X, self.n_signatures)

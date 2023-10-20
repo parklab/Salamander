@@ -183,9 +183,9 @@ class MultimodalCorrNMF:
         for model in self.models:
             model.sigma_sq = sigma_sq
 
-    def _update_Ws(self, given_signatures):
-        for model, given_sigs in zip(self.models, given_signatures):
-            if given_sigs is None:
+    def _update_Ws(self):
+        for model in self.models:
+            if model.n_given_signatures < model.n_signatures:
                 model._update_W()
 
     def _update_ps(self):
@@ -353,16 +353,14 @@ class MultimodalCorrNMF:
             given_signatures,
             given_signature_embeddings,
         ):
-            if given_sigs is None:
-                model.signature_names = np.char.add(
-                    modality_name + " ", model.signature_names
-                )
-
             model._initialize(
                 given_signatures=given_sigs,
                 given_signature_embeddings=given_sig_embs,
                 given_sample_embeddings=U,
                 init_kwargs=init_kwargs,
+            )
+            model.signature_names[model.n_given_signatures :] = np.char.add(
+                modality_name + " ", model.signature_names[model.n_given_signatures :]
             )
 
     def fit(
@@ -404,7 +402,7 @@ class MultimodalCorrNMF:
             ps = self._update_ps()
             self._update_LsU(ps, given_signature_embeddings, given_sample_embeddings)
             self._update_sigma_sq()
-            self._update_Ws(given_signatures)
+            self._update_Ws()
 
             of_values.append(self.objective_function())
             prev_sof_value = sof_values[-1]

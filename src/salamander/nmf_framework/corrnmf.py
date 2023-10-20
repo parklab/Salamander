@@ -5,14 +5,8 @@ import pandas as pd
 from scipy.spatial.distance import squareform
 from scipy.special import gammaln
 
-from ..utils import (
-    kl_divergence,
-    match_signatures_pair,
-    poisson_llh,
-    samplewise_kl_divergence,
-    shape_checker,
-    type_checker,
-)
+from ..utils import match_signatures_pair, shape_checker, type_checker
+from ._utils_klnmf import kl_divergence, poisson_llh, samplewise_kl_divergence
 from .initialization import (
     init_custom,
     init_flat,
@@ -180,7 +174,6 @@ class CorrNMF(SignatureNMF):
         signatures = pd.DataFrame(
             self.W, index=self.mutation_types, columns=self.signature_names
         )
-
         return signatures
 
     @property
@@ -194,7 +187,6 @@ class CorrNMF(SignatureNMF):
             index=self.signature_names,
             columns=self.sample_names,
         )
-
         return exposures
 
     @property
@@ -380,6 +372,9 @@ class CorrNMF(SignatureNMF):
         """
         if given_signatures is not None:
             self._check_given_signatures(given_signatures)
+            self.n_given_signatures = len(given_signatures.columns)
+        else:
+            self.n_given_signatures = 0
 
         if given_signature_embeddings is not None:
             self._check_given_signature_embeddings(given_signature_embeddings)
@@ -407,8 +402,20 @@ class CorrNMF(SignatureNMF):
             self.W = init_separableNMF(self.X, self.n_signatures)
 
         if given_signatures is not None:
-            self.W = given_signatures.copy().values
-            self.signature_names = given_signatures.columns.to_numpy(dtype=str)
+            self.W[:, : self.n_given_signatures] = given_signatures.copy().values
+            given_signatures_names = given_signatures.columns.to_numpy(dtype="<U20")
+            n_new_signatures = self.n_signatures - self.n_given_signatures
+            new_signatures_names = np.array(
+                [f"Sig{k+1}" for k in range(n_new_signatures)]
+            )
+            self.signature_names = np.concatenate(
+                [given_signatures_names, new_signatures_names]
+            )
+
+        else:
+            self.signature_names = np.array(
+                [f"Sig{k+1}" for k in range(self.n_signatures)], dtype="<U20"
+            )
 
         self.W /= np.sum(self.W, axis=0)
         self.W = self.W.clip(EPSILON)

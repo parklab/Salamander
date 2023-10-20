@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 from numba import njit
 
-from ..utils import kl_divergence, normalize_WH, poisson_llh, samplewise_kl_divergence
+from ..utils import normalize_WH
+from ._utils_klnmf import kl_divergence, poisson_llh, samplewise_kl_divergence, update_H
 from .nmf import NMF
 
 EPSILON = np.finfo(np.float32).eps
@@ -29,24 +30,13 @@ def kl_divergence_penalized(
 
 
 @njit
-def update_H(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> np.ndarray:
-    """
-    The multiplicative update rule of the exposure matrix H
-    derived by Lee and Seung. See Theorem 2 in
-    "Algorithms for non-negative matrix factorization".
-
-    Clipping the matrix avoids floating point errors.
-    """
-    H *= W.T @ (X / (W @ H))
-    H /= np.sum(W, axis=0)[:, np.newaxis]
-    H = H.clip(EPSILON)
-
-    return H
-
-
-@njit
 def update_W_unconstrained(
-    X: np.ndarray, W: np.ndarray, H: np.ndarray, lam: float, delta: float
+    X: np.ndarray,
+    W: np.ndarray,
+    H: np.ndarray,
+    lam: float,
+    delta: float,
+    n_given_signatures: int = 0,
 ) -> np.ndarray:
     n_signatures = W.shape[1]
     diag = np.diag(np.full(n_signatures, delta))
@@ -64,7 +54,10 @@ def update_W_unconstrained(
     numerator = numerator_s1 + numerator_s2
     denominator = 4 * lam * WY_abs
     W_unconstrained = W * numerator / denominator
-    W_unconstrained = W_unconstrained.clip(EPSILON)
+    W_unconstrained[:, :n_given_signatures] = W[:, :n_given_signatures].copy()
+    W_unconstrained[:, n_given_signatures:] = W_unconstrained[
+        :, n_given_signatures:
+    ].clip(EPSILON)
 
     return W_unconstrained
 
@@ -98,11 +91,9 @@ def line_search(
 
 class MvNMF(NMF):
     """
-    Min-volume non-negative matrix factorization. See Algorithm 1 in
-
-    Leplat, V., Gillis, N. and Ang, A.M., 2020.
-    Blind audio source separation with minimum-volume beta-divergence NMF.
-    IEEE Transactions on Signal Processing, 68, pp.3400-3410.
+    Min-volume non-negative matrix factorization. This algorithms is a volume-
+    regularized version of NMF with the generalized Kullback-Leibler (KL)
+    divergence.
 
     Parameters
     ----------
@@ -128,6 +119,12 @@ class MvNMF(NMF):
 
     tol : float, default=1e-7
         Tolerance of the stopping condition.
+
+    Reference
+    ---------
+    Leplat, V., Gillis, N. and Ang, A.M., 2020.
+    Blind audio source separation with minimum-volume beta-divergence NMF.
+    IEEE Transactions on Signal Processing, 68, pp.3400-3410.
     """
 
     def __init__(
@@ -167,7 +164,9 @@ class MvNMF(NMF):
         self.H = update_H(self.X, self.W, self.H)
 
     def _update_W_unconstrained(self):
-        return update_W_unconstrained(self.X, self.W, self.H, self.lam, self.delta)
+        return update_W_unconstrained(
+            self.X, self.W, self.H, self.lam, self.delta, self.n_given_signatures
+        )
 
     def _line_search(self, W_unconstrained):
         self.W, self.H, self._gamma = line_search(
@@ -232,7 +231,7 @@ class MvNMF(NMF):
 
             self._update_H()
 
-            if given_signatures is None:
+            if self.n_given_signatures < self.n_signatures:
                 self._update_W()
 
             prev_of_value = of_values[-1]
