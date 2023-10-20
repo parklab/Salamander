@@ -295,31 +295,31 @@ def corr_plot(
     return clustergrid
 
 
-def _get_colors_signature_plot(colors, mutation_types):
+def _get_colors_signature_plot(mutation_types, colors=None):
     """
-    Given the colors argument of sigplot_bar and the mutation types, return the
-    colors used in the signature bar chart.
+    Given the mutation types and the colors argument of sigplot_bar, return the
+    final colors used in the signature bar chart.
     """
     n_features = len(mutation_types)
 
-    if colors == "SBS96" or (n_features == 96 and all(mutation_types == SBS_TYPES_96)):
+    if colors == "SBS96" or (
+        n_features == 96 and all(mutation_types == SBS_TYPES_96) and colors is None
+    ):
         if n_features != 96:
             raise ValueError(
                 "The standard SBS colors can only be used "
                 "when the signatures have 96 features."
             )
-
         colors = COLORS_SBS96
 
     elif colors == "Indel83" or (
-        n_features == 83 and all(mutation_types == INDEL_TYPES_83)
+        n_features == 83 and all(mutation_types == INDEL_TYPES_83) and colors is None
     ):
         if n_features != 83:
             raise ValueError(
                 "The standard Indel colors can only be used "
                 "when the signatures have 83 features."
             )
-
         colors = COLORS_INDEL83
 
     elif type(colors) in [str, tuple]:
@@ -365,7 +365,7 @@ def _signature_plot(
 
     signature_normalized = signature / signature.sum(axis=0)
     mutation_types = signature.index
-    colors = _get_colors_signature_plot(colors, mutation_types)
+    colors = _get_colors_signature_plot(mutation_types, colors)
 
     ax.set_title(signature_normalized.columns[0])
     ax.spines["left"].set_visible(False)
