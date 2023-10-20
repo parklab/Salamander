@@ -245,13 +245,11 @@ class CorrNMF(SignatureNMF):
     def objective(self) -> str:
         return "maximize"
 
-    def _surrogate_objective_function(
-        self, p, penalize_sample_embeddings=True
-    ) -> float:
+    def _surrogate_objective_function(self, penalize_sample_embeddings=True) -> float:
         """
-        The surrogate lower bound of the ELBO after
-        introducing the auxiliary parameters p.
+        The surrogate lower bound of the ELBO.
         """
+        p = self._update_p()
         exposures = self.exposures.values
         aux = np.log(self.W)[:, :, None] + np.log(exposures)[None, :, :] - np.log(p)
         sof_value = np.einsum("VD,VKD,VKD->", self.X, p, aux, optimize="greedy").item()

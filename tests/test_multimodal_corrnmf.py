@@ -113,9 +113,9 @@ def surrogate_objective_init():
     return np.load(f"{PATH_TEST_DATA}/surrogate_objective_init.npy")
 
 
-def test_surrogate_objective_function(multi_model_init, _ps, surrogate_objective_init):
+def test_surrogate_objective_function(multi_model_init, surrogate_objective_init):
     assert np.allclose(
-        multi_model_init._surrogate_objective_function(_ps),
+        multi_model_init._surrogate_objective_function(),
         surrogate_objective_init,
     )
 

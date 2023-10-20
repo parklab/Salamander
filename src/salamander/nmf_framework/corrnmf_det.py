@@ -220,8 +220,6 @@ class CorrNMFDet(CorrNMF):
             init_kwargs=init_kwargs,
         )
         of_values = [self.objective_function()]
-        sof_values = [self.objective_function()]
-
         n_iteration = 0
         converged = False
 
@@ -239,16 +237,14 @@ class CorrNMFDet(CorrNMF):
             if self.n_given_signatures < self.n_signatures:
                 self._update_W()
 
+            prev_of_value = of_values[-1]
             of_values.append(self.objective_function())
-            prev_sof_value = sof_values[-1]
-            sof_values.append(self._surrogate_objective_function(p))
-            rel_change = (sof_values[-1] - prev_sof_value) / np.abs(prev_sof_value)
+            rel_change = (of_values[-1] - prev_of_value) / np.abs(prev_of_value)
             converged = (
                 rel_change < self.tol and n_iteration >= self.min_iterations
             ) or (n_iteration >= self.max_iterations)
 
         if history:
             self.history["objective_function"] = of_values[1:]
-            self.history["surrogate_objective_function"] = sof_values[1:]
 
         return self

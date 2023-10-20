@@ -97,9 +97,9 @@ def surrogate_objective_init(path_suffix):
     return np.load(f"{PATH_TEST_DATA}/surrogate_objective_init_{path_suffix}")
 
 
-def test_surrogate_objective_function(model_init, _p, surrogate_objective_init):
+def test_surrogate_objective_function(model_init, surrogate_objective_init):
     assert np.allclose(
-        model_init._surrogate_objective_function(_p), surrogate_objective_init
+        model_init._surrogate_objective_function(), surrogate_objective_init
     )
 
 

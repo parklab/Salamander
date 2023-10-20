@@ -126,13 +126,14 @@ class MultimodalCorrNMF:
     def objective(self) -> str:
         return "maximize"
 
-    def _surrogate_objective_function(self, ps) -> float:
+    def _surrogate_objective_function(self) -> float:
         """
         The surrogate lower bound of the ELBO.
         """
+        ps = self._update_ps()
         sof_value = np.sum(
             [
-                model._surrogate_objective_function(p, penalize_sample_embeddings=False)
+                model._surrogate_objective_function(penalize_sample_embeddings=False)
                 for model, p in zip(self.models, ps)
             ]
         )
@@ -387,8 +388,6 @@ class MultimodalCorrNMF:
             init_kwargs=init_kwargs,
         )
         of_values = [self.objective_function()]
-        sof_values = [self.objective_function()]
-
         n_iteration = 0
         converged = False
 
@@ -404,17 +403,15 @@ class MultimodalCorrNMF:
             self._update_sigma_sq()
             self._update_Ws()
 
+            prev_of_value = of_values[-1]
             of_values.append(self.objective_function())
-            prev_sof_value = sof_values[-1]
-            sof_values.append(self._surrogate_objective_function(ps))
-            rel_change = (sof_values[-1] - prev_sof_value) / np.abs(prev_sof_value)
+            rel_change = (of_values[-1] - prev_of_value) / np.abs(prev_of_value)
             converged = (
                 rel_change < self.tol and n_iteration >= self.min_iterations
             ) or (n_iteration >= self.max_iterations)
 
         if history:
             self.history["objective_function"] = of_values[1:]
-            self.history["surrogate_objective_function"] = sof_values[1:]
 
         return self
 
