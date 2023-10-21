@@ -14,10 +14,10 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 from .consts import COLORS_INDEL83, COLORS_SBS96, INDEL_TYPES_83, SBS_TYPES_96
-from .utils import match_to_catalog
+from .utils import match_to_catalog, value_checker
 
 
-def paper_style(func):
+def salamander_style(func):
     @wraps(func)
     def rc_wrapper(*args, **kwargs):
         sns.set_context("notebook")
@@ -37,7 +37,6 @@ def paper_style(func):
             "xtick.labelsize": 12,
             "ytick.labelsize": 12,
         }
-
         mpl.rcParams.update(params)
 
         return func(*args, **kwargs)
@@ -60,7 +59,7 @@ def _annotate_plot(
         )
 
 
-@paper_style
+@salamander_style
 def scatter_1d(
     data: np.ndarray, annotations=None, annotation_kwargs=None, ax=None, **kwargs
 ):
@@ -86,7 +85,7 @@ def scatter_1d(
     return ax
 
 
-@paper_style
+@salamander_style
 def scatter_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the data points.
@@ -108,7 +107,7 @@ def scatter_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs
     return ax
 
 
-@paper_style
+@salamander_style
 def pca_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the data points.
@@ -128,7 +127,7 @@ def pca_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
     return ax
 
 
-@paper_style
+@salamander_style
 def tsne_2d(
     data, perplexity=30, annotations=None, annotation_kwargs=None, ax=None, **kwargs
 ):
@@ -153,7 +152,7 @@ def tsne_2d(
     return ax
 
 
-@paper_style
+@salamander_style
 def umap_2d(
     data,
     n_neighbors=15,
@@ -185,7 +184,87 @@ def umap_2d(
     return ax
 
 
-@paper_style
+@salamander_style
+def embeddings_plot(
+    data: np.ndarray,
+    method="umap",
+    normalize=False,
+    annotations=None,
+    annotation_kwargs=None,
+    ax=None,
+    **kwargs,
+):
+    """
+    The rows (!) of 'data' are assumed to be the single data points.
+    """
+    value_checker("method", method, ["pca", "tsne", "umap"])
+
+    if normalize:
+        data /= data.sum(axis=1)[:, np.newaxis]
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(6, 6))
+
+    annotation_kwargs = {} if annotation_kwargs is None else annotation_kwargs.copy()
+    n_dimensions = data.shape[0]
+
+    if n_dimensions in [1, 2]:
+        warnings.warn(
+            f"The dimension of the data points is {n_dimensions}. "
+            f"The method argument '{method}' will be ignored "
+            "and the embeddings are plotted directly.",
+            UserWarning,
+        )
+
+    if n_dimensions == 1:
+        ax = scatter_1d(
+            data[:, 0],
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
+
+    elif n_dimensions == 2:
+        ax = scatter_2d(
+            data,
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
+
+    elif method == "tsne":
+        ax = tsne_2d(
+            data,
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
+
+    elif method == "pca":
+        ax = pca_2d(
+            data,
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
+
+    else:
+        ax = umap_2d(
+            data,
+            annotations=annotations,
+            annotation_kwargs=annotation_kwargs,
+            ax=ax,
+            **kwargs,
+        )
+
+    return ax
+
+
+@salamander_style
 def plot_history(function_values, figtitle="", ax=None, **kwargs):
     if ax is None:
         ax = plt.gca()
@@ -196,7 +275,7 @@ def plot_history(function_values, figtitle="", ax=None, **kwargs):
     return ax
 
 
-@paper_style
+@salamander_style
 def corr_plot(
     corr: pd.DataFrame, figsize=(6, 6), cmap="vlag", annot=True, fmt=".2f", **kwargs
 ):
@@ -216,31 +295,31 @@ def corr_plot(
     return clustergrid
 
 
-def _get_colors_signature_plot(colors, mutation_types):
+def _get_colors_signature_plot(mutation_types, colors=None):
     """
-    Given the colors argument of sigplot_bar and the mutation types, return the
-    colors used in the signature bar chart.
+    Given the mutation types and the colors argument of sigplot_bar, return the
+    final colors used in the signature bar chart.
     """
     n_features = len(mutation_types)
 
-    if colors == "SBS96" or (n_features == 96 and all(mutation_types == SBS_TYPES_96)):
+    if colors == "SBS96" or (
+        n_features == 96 and all(mutation_types == SBS_TYPES_96) and colors is None
+    ):
         if n_features != 96:
             raise ValueError(
                 "The standard SBS colors can only be used "
                 "when the signatures have 96 features."
             )
-
         colors = COLORS_SBS96
 
     elif colors == "Indel83" or (
-        n_features == 83 and all(mutation_types == INDEL_TYPES_83)
+        n_features == 83 and all(mutation_types == INDEL_TYPES_83) and colors is None
     ):
         if n_features != 83:
             raise ValueError(
                 "The standard Indel colors can only be used "
                 "when the signatures have 83 features."
             )
-
         colors = COLORS_INDEL83
 
     elif type(colors) in [str, tuple]:
@@ -258,7 +337,7 @@ def _get_colors_signature_plot(colors, mutation_types):
     return colors
 
 
-@paper_style
+@salamander_style
 def _signature_plot(
     signature, colors=None, annotate_mutation_types=False, ax=None, **kwargs
 ):
@@ -286,7 +365,7 @@ def _signature_plot(
 
     signature_normalized = signature / signature.sum(axis=0)
     mutation_types = signature.index
-    colors = _get_colors_signature_plot(colors, mutation_types)
+    colors = _get_colors_signature_plot(mutation_types, colors)
 
     ax.set_title(signature_normalized.columns[0])
     ax.spines["left"].set_visible(False)
@@ -313,7 +392,7 @@ def _signature_plot(
     return ax
 
 
-@paper_style
+@salamander_style
 def signature_plot(
     signature,
     catalog=None,
@@ -376,7 +455,7 @@ def signature_plot(
     return axes
 
 
-@paper_style
+@salamander_style
 def signatures_plot(
     signatures,
     catalog=None,
@@ -434,34 +513,85 @@ def signatures_plot(
     return axes
 
 
-def _reorder_exposures(exposures: pd.DataFrame, reorder_signatures=True):
+def _get_sample_order(exposures: pd.DataFrame, normalize=True):
     """
-    Reorder the samples using hierarchical clustering and
-    reorder the signatures by their total relative exposure.
-    """
-    exposures_normalized = exposures / exposures.sum(axis=0)
+    Compute the aesthetically most pleasing order of the samples
+    for a stacked bar chart of the exposures.
 
-    d = pdist(exposures_normalized.T)
+    Parameters
+    ----------
+    exposures : pd.DataFrame of shape (n_signatures, n_samples)
+        The named exposure matrix
+
+    normalize : bool, default=True
+        If True, the exposures are normalized before computing the
+        hierarchical clustering.
+
+    Returns
+    -------
+    sample_order : np.ndarray
+        The ordered sample names
+    """
+    if normalize:
+        # not in-place
+        exposures = exposures / exposures.sum(axis=0)
+
+    d = pdist(exposures.T)
     linkage = fastcluster.linkage(d)
     # get the optimal sample order that is consistent
     # with the hierarchical clustering linkage
     sample_order = hierarchy.leaves_list(hierarchy.optimal_leaf_ordering(linkage, d))
-    samples_reordered = exposures_normalized.columns[sample_order]
-    exposures_reordered = exposures_normalized[samples_reordered]
+    sample_order = exposures.columns[sample_order].to_numpy()
+    return sample_order
 
-    # order the signatures by their total exposure
+
+def _reorder_exposures(
+    exposures: pd.DataFrame, sample_order=None, reorder_signatures=True
+):
+    """
+    Reorder the samples with hierarchical clustering and
+    reorder the signatures by their total relative exposure.
+
+    Parameters
+    ----------
+    exposures : pd.DataFrame of shape (n_signatures, n_samples)
+        The named exposure matrix
+
+    sample_order : np.ndarray, default=None
+        A predefined order of the samples as a list of sample names.
+        If None, hierarchical clustering is used to compute the
+        aesthetically most pleasing order.
+
+    reorder_signatures : bool, default=True
+        If True, the signatures will be reordered such that the
+        total relative exposures of the signatures decrease from the bottom
+        to the top signature in the stacked bar chart.
+
+    Returns
+    -------
+    exposures_reordered : pd.DataFrame of shape (n_signatures, n_samples)
+        The reorderd named exposure matrix
+    """
+    if sample_order is None:
+        sample_order = _get_sample_order(exposures)
+
+    exposures_reordered = exposures[sample_order]
+
+    # order the signatures by their total relative exposure
     if reorder_signatures:
-        signatures_reordered = (
-            exposures_reordered.sum(axis=1).sort_values(ascending=False).index
+        exposures_normalized = exposures_reordered / exposures_reordered.sum(axis=0)
+        signature_order = (
+            exposures_normalized.sum(axis=1).sort_values(ascending=False).index
         )
-        exposures_reordered = exposures_reordered.reindex(signatures_reordered)
+        exposures_reordered = exposures_reordered.reindex(signature_order)
 
     return exposures_reordered
 
 
-@paper_style
+@salamander_style
 def exposures_plot(
     exposures: pd.DataFrame,
+    sample_order=None,
     reorder_signatures=True,
     annotate_samples=True,
     colors=None,
@@ -470,13 +600,49 @@ def exposures_plot(
     **kwargs,
 ):
     """
-    Visualize the exposures using a stacked bar chart.
+    Visualize the exposures with a stacked bar chart.
+
+    Parameter
+    ---------
+    exposures : pd.DataFrame of shape (n_signatures, n_samples)
+        The named exposure matrix.
+
+    sample_order : np.ndarray, default=None
+        A predefined order of the samples as a list of sample names.
+        If None, hierarchical clustering is used to compute the
+        aesthetically most pleasing order.
+
+    reorder_signatures : bool, default=True
+        If True, the signatures will be reordered such that the
+        total relative exposures of the signatures decrease from the bottom
+        to the top signature in the stacked bar chart.
+
+    annotate_samples : bool, default=True
+        If True, the x-axis is annotated with the sample names.
+
+    colors : list of length n_signatures, default=None
+        Colors to pass to matplotlibs ax.bar, one per signature.
+
+    n_col_legend : int, default=1
+        The number of columns of the legend.
+
+    ax : matplotlib.axes.Axes, default=None
+        Pre-existing axes for the plot. Otherwise, create an axis internally.
+
+    kwargs : dict
+        Any keyword arguments to be passed to matplotlibs ax.bar.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The matplotlib axes containing the plot.
     """
     n_signatures, n_samples = exposures.shape
-    exposures_reordered = _reorder_exposures(
-        exposures, reorder_signatures=reorder_signatures
+    # not in-place
+    exposures = exposures / exposures.sum(axis=0)
+    exposures = _reorder_exposures(
+        exposures, sample_order=sample_order, reorder_signatures=reorder_signatures
     )
-    samples = exposures_reordered.columns
 
     if ax is None:
         _, ax = plt.subplots(figsize=(0.3 * n_samples, 4))
@@ -486,8 +652,8 @@ def exposures_plot(
 
     bottom = np.zeros(n_samples)
 
-    for signature, color in zip(exposures_reordered.T, colors):
-        signature_exposures = exposures_reordered.T[signature].to_numpy()
+    for signature, color in zip(exposures.T, colors):
+        signature_exposures = exposures.T[signature].to_numpy()
         ax.bar(
             np.arange(n_samples),
             signature_exposures,
@@ -502,7 +668,7 @@ def exposures_plot(
 
     if annotate_samples:
         ax.set_xticks(np.arange(n_samples))
-        ax.set_xticklabels(samples, rotation=90, ha="center", fontsize=10)
+        ax.set_xticklabels(exposures.columns, rotation=90, ha="center", fontsize=10)
 
     else:
         ax.get_xaxis().set_visible(False)

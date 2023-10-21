@@ -1,25 +1,12 @@
-import multiprocessing
-import os
-import warnings
 from abc import abstractmethod
-from copy import deepcopy
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import squareform
 from scipy.special import gammaln
 
-from ..plot import pca_2d, scatter_1d, scatter_2d, tsne_2d, umap_2d
-from ..utils import (
-    kl_divergence,
-    match_signatures_pair,
-    poisson_llh,
-    samplewise_kl_divergence,
-    shape_checker,
-    type_checker,
-    value_checker,
-)
+from ..utils import match_signatures_pair, shape_checker, type_checker
+from ._utils_klnmf import kl_divergence, poisson_llh, samplewise_kl_divergence
 from .initialization import (
     init_custom,
     init_flat,
@@ -65,8 +52,8 @@ class CorrNMF(SignatureNMF):
 
         - fit:
             Run CorrNMF for a given mutation count data. Every
-            fit method should also implement a "refitting version", where the signatures
-            W are known in advance and fixed
+            fit method should also implement a version that allows fixing
+            arbitrary many a priori known signatures.
 
 
     The following attributes are implemented in the abstract class CNMF:
@@ -134,7 +121,6 @@ class CorrNMF(SignatureNMF):
         n_signatures=1,
         dim_embeddings=None,
         init_method="nndsvd",
-        update_W="1999-Lee",
         min_iterations=500,
         max_iterations=10000,
         tol=1e-7,
@@ -158,11 +144,6 @@ class CorrNMF(SignatureNMF):
             "nndsvda", "nndsvdar" "random" and "separableNMF".
             See the initialization module for further details.
 
-        update_W: str, "1999-Lee" or "surrogate"
-            The signature matrix W can be inferred by either using the Lee and Seung
-            multiplicative update rules to optimize the objective function or by
-            maximizing the surrogate objective function.
-
         min_iterations: int
             The minimum number of iterations to perform during inference
 
@@ -180,8 +161,6 @@ class CorrNMF(SignatureNMF):
             dim_embeddings = n_signatures
 
         self.dim_embeddings = dim_embeddings
-        value_checker("update_W", update_W, ["1999-Lee", "surrogate"])
-        self.update_W = update_W
 
         # initialize data/fitting dependent attributes
         self.W = None
@@ -195,7 +174,6 @@ class CorrNMF(SignatureNMF):
         signatures = pd.DataFrame(
             self.W, index=self.mutation_types, columns=self.signature_names
         )
-
         return signatures
 
     @property
@@ -205,11 +183,10 @@ class CorrNMF(SignatureNMF):
         restructured and determined by the signature and sample embeddings.
         """
         exposures = pd.DataFrame(
-            np.exp(np.tile(self.alpha, (self.n_signatures, 1)) + self.L.T @ self.U),
+            np.exp(self.alpha + self.L.T @ self.U),
             index=self.signature_names,
             columns=self.sample_names,
         )
-
         return exposures
 
     @property
@@ -268,13 +245,11 @@ class CorrNMF(SignatureNMF):
     def objective(self) -> str:
         return "maximize"
 
-    def _surrogate_objective_function(
-        self, p, penalize_sample_embeddings=True
-    ) -> float:
+    def _surrogate_objective_function(self, penalize_sample_embeddings=True) -> float:
         """
-        The surrogate lower bound of the ELBO after
-        introducing the auxiliary parameters p.
+        The surrogate lower bound of the ELBO.
         """
+        p = self._update_p()
         exposures = self.exposures.values
         aux = np.log(self.W)[:, :, None] + np.log(exposures)[None, :, :] - np.log(p)
         sof_value = np.einsum("VD,VKD,VKD->", self.X, p, aux, optimize="greedy").item()
@@ -311,13 +286,8 @@ class CorrNMF(SignatureNMF):
         pass
 
     @abstractmethod
-    def _update_W(self, p):
-        """
-        Input:
-        ------
-        p: np.ndarray
-            The auxiliary parameters of CorrNMF
-        """
+    def _update_W(self):
+        pass
 
     @abstractmethod
     def _update_p(self):
@@ -400,6 +370,9 @@ class CorrNMF(SignatureNMF):
         """
         if given_signatures is not None:
             self._check_given_signatures(given_signatures)
+            self.n_given_signatures = len(given_signatures.columns)
+        else:
+            self.n_given_signatures = 0
 
         if given_signature_embeddings is not None:
             self._check_given_signature_embeddings(given_signature_embeddings)
@@ -427,8 +400,20 @@ class CorrNMF(SignatureNMF):
             self.W = init_separableNMF(self.X, self.n_signatures)
 
         if given_signatures is not None:
-            self.W = given_signatures.copy().values
-            self.signature_names = given_signatures.columns.to_numpy(dtype=str)
+            self.W[:, : self.n_given_signatures] = given_signatures.copy().values
+            given_signatures_names = given_signatures.columns.to_numpy(dtype="<U20")
+            n_new_signatures = self.n_signatures - self.n_given_signatures
+            new_signatures_names = np.array(
+                [f"Sig{k+1}" for k in range(n_new_signatures)]
+            )
+            self.signature_names = np.concatenate(
+                [given_signatures_names, new_signatures_names]
+            )
+
+        else:
+            self.signature_names = np.array(
+                [f"Sig{k+1}" for k in range(self.n_signatures)], dtype="<U20"
+            )
 
         self.W /= np.sum(self.W, axis=0)
         self.W = self.W.clip(EPSILON)
@@ -499,243 +484,19 @@ class CorrNMF(SignatureNMF):
 
         return reordered_indices
 
-    def _get_embedding_annotations(self, annotate_signatures, annotate_samples):
+    def _get_embedding_data(self) -> np.ndarray:
+        """
+        In CorrNMF, the data for the embedding plot are the (transpoed) signature and
+        sample embeddings.
+        """
+        return np.concatenate([self.L, self.U], axis=1).T.copy()
+
+    def _get_default_embedding_annotations(self) -> np.ndarray:
+        """
+        The embedding plot defaults to annotating the signature embeddings.
+        """
         # Only annotate with the first 20 characters of names
         annotations = np.empty(self.n_signatures + self.n_samples, dtype="U20")
-
-        if annotate_signatures:
-            annotations[: self.n_signatures] = self.signature_names
-
-        if annotate_samples:
-            annotations[-self.n_samples :] = self.sample_names
+        annotations[: self.n_signatures] = self.signature_names
 
         return annotations
-
-    def plot_embeddings(
-        self,
-        method="umap",
-        annotate_signatures=True,
-        annotate_samples=False,
-        annotation_kwargs=None,
-        normalize=False,
-        ax=None,
-        outfile=None,
-        **kwargs,
-    ):
-        """
-        Plot the signature and sample embeddings. If the embedding dimension is two,
-        the embeddings will be plotted directly, ignoring the chosen method.
-        See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
-
-        Input:
-        ------
-        methdod: str
-            Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
-            will be applied to plot the signature and sample embeddings in 2D.
-
-        annotate_signatures: bool
-
-        annotate_samples: bool
-
-        normalize: bool
-            Normalize the embeddings before applying the dimensionality reduction.
-
-        *args, **kwargs:
-            arguments to be passed to scatter_2d, tsne_2d, pca_2d or umap_2d
-        """
-        value_checker("method", method, ["pca", "tsne", "umap"])
-        annotations = self._get_embedding_annotations(
-            annotate_signatures, annotate_samples
-        )
-
-        data = np.concatenate([self.L, self.U], axis=1).T
-
-        if normalize:
-            data /= np.sum(data, axis=0)
-
-        if self.dim_embeddings in [1, 2]:
-            warnings.warn(
-                f"The embedding dimension is {self.dim_embeddings}. "
-                f"The method argument '{method}' will be ignored "
-                "and the embeddings are plotted directly.",
-                UserWarning,
-            )
-
-        if self.dim_embeddings == 1:
-            ax = scatter_1d(
-                data[:, 0],
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        elif self.dim_embeddings == 2:
-            ax = scatter_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        elif method == "tsne":
-            ax = tsne_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        elif method == "pca":
-            ax = pca_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        else:
-            ax = umap_2d(
-                data,
-                annotations=annotations,
-                annotation_kwargs=annotation_kwargs,
-                ax=ax,
-                **kwargs,
-            )
-
-        if outfile is not None:
-            plt.savefig(outfile, bbox_inches="tight")
-
-        return ax
-
-
-class CorrNMFHyperparameterSelector:
-    """
-    The embedding dimension of samples and signatures is
-    the only hyperparameter of correlated NMF.
-    This class implements methods to select the "optimal" embedding dimension.
-    The framework of hyperparameter selectors allows to implement
-    a denovo signature analysis pipeline in an NMF algorithm agnostic manner:
-    A dictionary can be used to set all hyperparameters,
-    irrespective of the NMF algorithm and its arbitrary number of hyperparameters.
-    """
-
-    def __init__(self, method="unbiased", method_kwargs=None):
-        value_checker("method", method, ["BIC", "proportional", "unbiased"])
-        self.method = method
-        self.method_kwargs = {} if method_kwargs is None else method_kwargs.copy()
-
-        # initialize selection dependent attributes
-        self.corrnmf_algorithm = None
-        self.dims_embeddings = np.empty(0, dtype=int)
-        self.data = None
-        self.given_signatures = None
-        self.init_kwargs = None
-        self.verbose = 0
-        self.models = []
-
-    def _job_select_bic(self, dim_embeddings):
-        """
-        Apply CorrNMF for a single embedding dimension.
-        """
-        model = deepcopy(self.corrnmf_algorithm)
-        model.dim_embeddings = dim_embeddings
-        model.fit(
-            data=self.data,
-            given_signatures=self.given_signatures,
-            init_kwargs=self.init_kwargs,
-            verbose=0,
-        )
-
-        if self.verbose:
-            print(f"CorrNMF with dim_embeddings = {dim_embeddings} finished.")
-
-        return model
-
-    def select_bic(self, ncpu=None):
-        """
-        Select the best embedding dimension based
-        on the Bayesian Information Criterion (BIC).
-        """
-        if ncpu is None:
-            ncpu = os.cpu_count()
-
-        if ncpu > 1:
-            workers = multiprocessing.Pool(ncpu)
-            models = workers.map(self._job_select_bic, self.dims_embeddings)
-            workers.close()
-            workers.join()
-
-        else:
-            models = [
-                self._job_select_bic(dim_embeddings)
-                for dim_embeddings in self.dims_embeddings
-            ]
-
-        self.models = models
-        bics = np.array([model.bic for model in models])
-        best_index = np.argmin(bics)
-        best_model = models[best_index]
-
-        return best_model.dim_embeddings
-
-    def select_proportional(self, proportion=0.75):
-        """
-        The embedding dimension is set to a proportion of the number of signatures.
-        """
-        n_signatures = self.corrnmf_algorithm.n_signatures
-        dim_embeddings = int(proportion * n_signatures) if n_signatures > 1 else 1
-
-        return dim_embeddings
-
-    def select_unbiased(self, normalized=True):
-        """
-        The embedding dimension is set to the number of signatures
-        if 'normalized' is false. If 'normalized' is true, the embedding
-        dimension is set to the number of signatures minus one.
-
-        Input:
-        ------
-        normalized: bool
-            If the input count matrix will be normalized, the number of free
-            parameters for each sample exposure is 'n_signatures - 1'.
-            Without the normalization, there are 'n_signatures' many free parameters.
-        """
-        n_signatures = self.corrnmf_algorithm.n_signatures
-
-        if not normalized:
-            return n_signatures
-
-        return max(1, n_signatures - 1)
-
-    def select(
-        self,
-        corrnmf_algorithm,
-        data: pd.DataFrame,
-        given_signatures=None,
-        init_kwargs=None,
-        ncpu=None,
-        verbose=0,
-    ):
-        self.corrnmf_algorithm = corrnmf_algorithm
-        self.dims_embeddings = np.arange(1, corrnmf_algorithm.n_signatures + 1)
-        self.data = data
-        self.given_signatures = given_signatures
-        self.init_kwargs = init_kwargs
-        self.verbose = verbose
-
-        if self.method == "BIC":
-            dim_embeddings = self.select_bic(ncpu=ncpu, **self.method_kwargs)
-
-        elif self.method == "proportional":
-            dim_embeddings = self.select_proportional(**self.method_kwargs)
-
-        elif self.method == "unbiased":
-            dim_embeddings = self.select_unbiased(**self.method_kwargs)
-
-        hyperparameters = {"dim_embeddings": dim_embeddings}
-
-        return hyperparameters

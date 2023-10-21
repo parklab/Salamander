@@ -10,8 +10,6 @@ embeddings for all modalities in the same embedding space.
 # are accessed.
 # pylint: disable=protected-access
 
-import warnings
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -19,16 +17,14 @@ from scipy import optimize
 from scipy.spatial.distance import squareform
 
 from ..plot import (
+    _get_sample_order,
     corr_plot,
-    paper_style,
-    pca_2d,
-    scatter_1d,
-    scatter_2d,
+    embeddings_plot,
+    salamander_style,
     signatures_plot,
-    tsne_2d,
-    umap_2d,
 )
 from ..utils import type_checker, value_checker
+from . import _utils_corrnmf
 from .corrnmf_det import CorrNMFDet
 
 EPSILON = np.finfo(np.float32).eps
@@ -41,7 +37,6 @@ class MultimodalCorrNMF:
         ns_signatures=None,
         dim_embeddings=None,
         init_method="nndsvd",
-        update_W="1999-Lee",
         min_iterations=500,
         max_iterations=10000,
         tol=1e-7,
@@ -62,7 +57,7 @@ class MultimodalCorrNMF:
         self.max_iterations = max_iterations
         self.tol = tol
         self.models = [
-            CorrNMFDet(n_signatures, dim_embeddings, init_method, update_W)
+            CorrNMFDet(n_signatures, dim_embeddings, init_method)
             for n_signatures in ns_signatures
         ]
 
@@ -137,13 +132,14 @@ class MultimodalCorrNMF:
     def objective(self) -> str:
         return "maximize"
 
-    def _surrogate_objective_function(self, ps) -> float:
+    def _surrogate_objective_function(self) -> float:
         """
         The surrogate lower bound of the ELBO.
         """
+        ps = self._update_ps()
         sof_value = np.sum(
             [
-                model._surrogate_objective_function(p, penalize_sample_embeddings=False)
+                model._surrogate_objective_function(penalize_sample_embeddings=False)
                 for model, p in zip(self.models, ps)
             ]
         )
@@ -186,57 +182,78 @@ class MultimodalCorrNMF:
             model._update_alpha()
 
     def _update_sigma_sq(self):
-        sum_norm_sigs = np.sum([np.sum(model.L**2) for model in self.models])
-        sum_norm_samples = np.sum(self.models[0].U ** 2)
-
-        sigma_sq = (sum_norm_sigs + sum_norm_samples) / (
-            self.dim_embeddings * (np.sum(self.ns_signatures) + self.n_samples)
-        )
+        Ls = np.concatenate([model.L for model in self.models], axis=1)
+        embeddings = np.concatenate([Ls, self.models[0].U], axis=1)
+        sigma_sq = np.mean(embeddings**2)
         sigma_sq = np.clip(sigma_sq, EPSILON, None)
 
         for model in self.models:
             model.sigma_sq = sigma_sq
 
-    def _update_Ws(self, ps, given_signatures):
-        for model, p, given_sigs in zip(self.models, ps, given_signatures):
-            if given_sigs is None:
-                model._update_W(p)
+    def _update_Ws(self):
+        for model in self.models:
+            if model.n_given_signatures < model.n_signatures:
+                model._update_W()
 
     def _update_ps(self):
         return [model._update_p() for model in self.models]
 
     def _objective_fun_u(self, u, index, aux_cols):
+        sigma_sq = self.models[0].sigma_sq
         s = -np.sum(
             [
-                model._objective_fun_u(u, index, aux_col, add_penalty_u=False)
+                _utils_corrnmf.objective_function_embedding(
+                    u,
+                    model.L,
+                    model.alpha[index],
+                    sigma_sq,
+                    aux_col,
+                    add_penalty=False,
+                )
                 for model, aux_col in zip(self.models, aux_cols)
             ]
         )
-        s -= np.dot(u, u) / (2 * self.models[0].sigma_sq)
+        s -= np.dot(u, u) / (2 * sigma_sq)
 
         return -s
 
     def _gradient_u(self, u, index, s_grads):
+        sigma_sq = self.models[0].sigma_sq
         s = -np.sum(
             [
-                model._gradient_u(u, index, s_grad, add_penalty_u=False)
+                _utils_corrnmf.gradient_embedding(
+                    u,
+                    model.L,
+                    model.alpha[index],
+                    sigma_sq,
+                    s_grad,
+                    add_penalty=False,
+                )
                 for model, s_grad in zip(self.models, s_grads)
             ],
             axis=0,
         )
-        s -= u / self.models[0].sigma_sq
+        s -= u / sigma_sq
 
         return -s
 
     def _hessian_u(self, u, index, outer_prods_Ls):
+        sigma_sq = self.models[0].sigma_sq
         s = -np.sum(
             [
-                model._hessian_u(u, index, outer_prods_L, add_penalty_u=False)
+                _utils_corrnmf.hessian_embedding(
+                    u,
+                    model.L,
+                    model.alpha[index],
+                    sigma_sq,
+                    outer_prods_L,
+                    add_penalty=False,
+                )
                 for model, outer_prods_L in zip(self.models, outer_prods_Ls)
             ],
             axis=0,
         )
-        s -= np.diag(np.full(self.dim_embeddings, 1 / self.models[0].sigma_sq))
+        s -= np.diag(np.full(self.dim_embeddings, 1 / sigma_sq))
 
         return -s
 
@@ -343,16 +360,14 @@ class MultimodalCorrNMF:
             given_signatures,
             given_signature_embeddings,
         ):
-            if given_sigs is None:
-                model.signature_names = np.char.add(
-                    modality_name + " ", model.signature_names
-                )
-
             model._initialize(
                 given_signatures=given_sigs,
                 given_signature_embeddings=given_sig_embs,
                 given_sample_embeddings=U,
                 init_kwargs=init_kwargs,
+            )
+            model.signature_names[model.n_given_signatures :] = np.char.add(
+                modality_name + " ", model.signature_names[model.n_given_signatures :]
             )
 
     def fit(
@@ -379,8 +394,6 @@ class MultimodalCorrNMF:
             init_kwargs=init_kwargs,
         )
         of_values = [self.objective_function()]
-        sof_values = [self.objective_function()]
-
         n_iteration = 0
         converged = False
 
@@ -394,23 +407,21 @@ class MultimodalCorrNMF:
             ps = self._update_ps()
             self._update_LsU(ps, given_signature_embeddings, given_sample_embeddings)
             self._update_sigma_sq()
-            self._update_Ws(ps, given_signatures)
+            self._update_Ws()
 
+            prev_of_value = of_values[-1]
             of_values.append(self.objective_function())
-            prev_sof_value = sof_values[-1]
-            sof_values.append(self._surrogate_objective_function(ps))
-            rel_change = (sof_values[-1] - prev_sof_value) / np.abs(prev_sof_value)
+            rel_change = (of_values[-1] - prev_of_value) / np.abs(prev_of_value)
             converged = (
                 rel_change < self.tol and n_iteration >= self.min_iterations
             ) or (n_iteration >= self.max_iterations)
 
         if history:
             self.history["objective_function"] = of_values[1:]
-            self.history["surrogate_objective_function"] = sof_values[1:]
 
         return self
 
-    @paper_style
+    @salamander_style
     def plot_signatures(
         self,
         colors=None,
@@ -447,9 +458,10 @@ class MultimodalCorrNMF:
 
         return axes
 
-    @paper_style
+    @salamander_style
     def plot_exposures(
         self,
+        sample_order=None,
         reorder_signatures=True,
         annotate_samples=True,
         colors=None,
@@ -475,10 +487,20 @@ class MultimodalCorrNMF:
         if colors is None:
             colors = [None for _ in range(self.n_modalities)]
 
+        if sample_order is None:
+            all_exposures = pd.concat([model.exposures for model in self.models])
+            sample_order = _get_sample_order(all_exposures)
+
         for n, (ax, model, cols) in enumerate(zip(axes, self.models, colors)):
+            if n < self.n_modalities - 1:
+                annotate = False
+            else:
+                annotate = annotate_samples
+
             ax = model.plot_exposures(
+                sample_order=sample_order,
                 reorder_signatures=reorder_signatures,
-                annotate_samples=annotate_samples,
+                annotate_samples=annotate,
                 colors=cols,
                 ncol_legend=ncol_legend,
                 ax=ax,
@@ -517,7 +539,7 @@ class MultimodalCorrNMF:
     def corr_samples(self) -> pd.DataFrame:
         return self.models[0].corr_samples
 
-    @paper_style
+    @salamander_style
     def plot_correlation(self, data="signatures", annot=False, outfile=None, **kwargs):
         """
         Plot the correlation matrix of the signatures or samples.
@@ -543,28 +565,22 @@ class MultimodalCorrNMF:
 
         return clustergrid
 
-    def _get_embedding_annotations(self, annotate_signatures, annotate_samples):
+    def _get_default_embedding_annotations(self):
         # Only annotate with the first 20 characters of names
         annotations = np.empty(np.sum(self.ns_signatures) + self.n_samples, dtype="U20")
-
-        if annotate_signatures:
-            signature_names = np.concatenate(
-                [model.signature_names for model in self.models]
-            )
-            annotations[: len(signature_names)] = signature_names
-
-        if annotate_samples:
-            annotations[-self.n_samples :] = self.models[0].sample_names
+        signature_names = np.concatenate(
+            [model.signature_names for model in self.models]
+        )
+        annotations[: len(signature_names)] = signature_names
 
         return annotations
 
-    @paper_style
     def plot_embeddings(
         self,
         method="umap",
-        annotate_signatures=True,
-        annotate_samples=False,
         normalize=False,
+        annotations=None,
+        annotation_kwargs=None,
         ax=None,
         outfile=None,
         **kwargs,
@@ -574,55 +590,55 @@ class MultimodalCorrNMF:
         is two, the embeddings will be plotted directly, ignoring the chosen method.
         See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
 
-        Input:
-        ------
-        methdod: str
+        Parameters
+        ----------
+        method : str, default='umap'
             Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
             will be applied to plot the signature and sample embeddings in 2D space.
 
-        annotate_signatures: bool
+        normalize : bool, default=False
+            If True, normalize the embeddings before applying the dimensionality
+            reduction.
 
-        annotate_samples: bool
+        annotations : list[str], default=None
+            Annotations per data point, e.g. the sample names. If None,
+            all signatures are annotated.
+            Note that there are sum('ns_signatures') + 'n_samples' data points,
+            i.e. the first sum('ns_signatures') elements in 'annotations'
+            are the signature annotations, not any sample annotations.
 
-        normalize: bool
-            Normalize the embeddings before applying the dimensionality reduction.
+        annotation_kwargs : dict, default=None
+            keyword arguments to pass to matplotlibs plt.txt()
 
-        *args, **kwargs:
-            arguments to be passed to scatter_2d, tsne_2d, pca_2d or umap_2d
+        ax : matplotlib.axes.Axes, default=None
+            Pre-existing axes for the plot. Otherwise, an axes is created.
+
+        outfile : str, default=None
+            If not None, the figure will be saved in the specified file path.
+
+        **kwargs :
+            keyword arguments to pass to seaborn's scatterplot
+
+        Returns
+        -------
+        ax : matplotlib.axes.Axes
+            The matplotlib axes containing the plot.
         """
-        value_checker("method", method, ["pca", "tsne", "umap"])
-        annotations = self._get_embedding_annotations(
-            annotate_signatures, annotate_samples
-        )
-
         Ls = np.concatenate([model.L for model in self.models], axis=1)
-        data = np.concatenate([Ls, self.models[0].U], axis=1).T
+        embedding_data = np.concatenate([Ls, self.models[0].U], axis=1).T.copy()
 
-        if normalize:
-            data /= np.sum(data, axis=0)
+        if annotations is None:
+            annotations = self._get_default_embedding_annotations()
 
-        if self.dim_embeddings in [1, 2]:
-            warnings.warn(
-                f"The embedding dimension is {self.dim_embeddings}. "
-                f"The method argument '{method}' will be ignored "
-                "and the embeddings are plotted directly.",
-                UserWarning,
-            )
-
-        if self.dim_embeddings == 1:
-            ax = scatter_1d(data[:, 0], annotations=annotations, ax=ax, **kwargs)
-
-        elif self.dim_embeddings == 2:
-            ax = scatter_2d(data, annotations=annotations, ax=ax, **kwargs)
-
-        elif method == "tsne":
-            ax = tsne_2d(data, annotations=annotations, ax=ax, **kwargs)
-
-        elif method == "pca":
-            ax = pca_2d(data, annotations=annotations, ax=ax, **kwargs)
-
-        else:
-            ax = umap_2d(data, annotations=annotations, ax=ax, **kwargs)
+        ax = embeddings_plot(
+            embedding_data,
+            method,
+            normalize,
+            annotations,
+            annotation_kwargs,
+            ax,
+            **kwargs,
+        )
 
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")
@@ -658,20 +674,61 @@ class MultimodalCorrNMF:
 
         return results
 
-    @paper_style
+    @salamander_style
     def plot_feature_change(
         self,
         in_modality=None,
         out_modalities="all",
-        normalize=True,
         colors=None,
         annotate_mutation_types=False,
         figsize=None,
         outfile=None,
         **kwargs,
     ):
+        """
+        For the signatures of one modality, plot the co-occuring spectra
+        in other modalities. This is achieved by interpreting a signature
+        embedding as a sample embedding and using the resulting exposures to
+        compute distributions over mutation types in different modalities.
+
+        Parameters
+        ----------
+        in_modality : str
+            The modality name of the signatures of interest, e.g. "SBS".
+
+        out_modalities : list or str, default="all"
+            A list of modalities to convert the 'in_modality' signatures
+            into, e.g. ["Indel", "SV"]. A single string can also be provided
+            to select only one 'out_modality'. By default, all modalities
+            other than the 'in_modality' are selected.
+
+        colors : list, default=None
+            A list of length '1 + len(out_modalities)' of colors to use
+            for the signature plots of the input modalitiy signatures
+            and the co-occuring spectra in the output modalites.
+
+        annotate_mutation_types : bool, default=False
+            If True, the x-axis of the spectra plots will be annotated
+            with the mutation types of the respective modalities.
+
+        figsize : tuple, default=None
+            The size of the matplotlib figure. If None, the figure size
+            is computed internally based on the number of input
+            signatures and output modalities.
+
+        outfile : str, default=None
+            If not None, the figure will be saved to the provided path.
+
+        kwargs : dict
+            Any keyword arguments to be passed to matplotlibs ax.bar.
+
+        Returns
+        -------
+        axes : np.ndarray
+            An array of matplotlib axes containing the plots.
+        """
         # result[0] are the 'in_modality' signatures
-        results = self.feature_change(in_modality, out_modalities, normalize)
+        results = self.feature_change(in_modality, out_modalities)
         n_signatures = results[0].shape[1]
         n_feature_spaces = len(results)
 
@@ -679,7 +736,7 @@ class MultimodalCorrNMF:
             colors = [None for _ in range(n_feature_spaces)]
 
         if figsize is None:
-            figsize = (8 * n_feature_spaces, 2 * n_signatures)
+            figsize = (4 * n_feature_spaces, n_signatures)
 
         fig, axes = plt.subplots(n_signatures, n_feature_spaces, figsize=figsize)
         fig.suptitle("Signature feature change")

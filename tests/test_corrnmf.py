@@ -10,36 +10,37 @@ PATH_TEST_DATA = f"{PATH}/nmf_framework/corrnmf"
 
 @pytest.fixture
 def counts():
-    return pd.read_csv(f"{PATH}/nmf_framework/counts.csv", index_col=0)
+    return pd.read_csv(f"{PATH_TEST_DATA}/counts.csv", index_col=0)
 
 
-@pytest.fixture(params=[(1, 1), (2, 2)])
-def model(request):
-    param = request.param
-    return corrnmf_det.CorrNMFDet(n_signatures=param[0], dim_embeddings=param[1])
-
-
-@pytest.fixture
-def path(model):
-    return (
-        f"{PATH_TEST_DATA}/"
-        f"corrnmf_nsigs{model.n_signatures}_dim{model.dim_embeddings}"
-    )
+@pytest.fixture(params=[1, 2])
+def n_signatures(request):
+    return request.param
 
 
 @pytest.fixture
-def W_init(path):
-    return np.load(f"{path}_W_init.npy")
+def dim_embeddings(n_signatures):
+    return n_signatures
 
 
 @pytest.fixture
-def alpha_init(path):
-    return np.load(f"{path}_alpha_init.npy")
+def path_suffix(n_signatures, dim_embeddings):
+    return f"nsigs{n_signatures}_dim{dim_embeddings}.npy"
 
 
 @pytest.fixture
-def _p(path):
-    return np.load(f"{path}_p.npy")
+def W_init(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/W_init_{path_suffix}")
+
+
+@pytest.fixture
+def alpha_init(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/alpha_init_{path_suffix}")
+
+
+@pytest.fixture
+def _p(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/p_{path_suffix}")
 
 
 @pytest.fixture
@@ -48,22 +49,26 @@ def _aux(counts, _p):
 
 
 @pytest.fixture
-def L_init(path):
-    return np.load(f"{path}_L_init.npy")
+def L_init(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/L_init_{path_suffix}")
 
 
 @pytest.fixture
-def U_init(path):
-    return np.load(f"{path}_U_init.npy")
+def U_init(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/U_init_{path_suffix}")
 
 
 @pytest.fixture
-def sigma_sq_init(path):
-    return np.load(f"{path}_sigma_sq_init.npy")
+def sigma_sq_init(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/sigma_sq_init_{path_suffix}")
 
 
 @pytest.fixture
-def model_init(model, counts, W_init, alpha_init, L_init, U_init, sigma_sq_init):
+def model_init(counts, W_init, alpha_init, L_init, U_init, sigma_sq_init):
+    n_signatures, dim_embeddings = L_init.shape
+    model = corrnmf_det.CorrNMFDet(
+        n_signatures=n_signatures, dim_embeddings=dim_embeddings
+    )
     model.X = counts.values
     model.W = W_init
     model.alpha = alpha_init
@@ -71,7 +76,7 @@ def model_init(model, counts, W_init, alpha_init, L_init, U_init, sigma_sq_init)
     model.U = U_init
     model.sigma_sq = sigma_sq_init
     model.mutation_types = counts.index
-    model.signature_names = ["_" for _ in range(model.n_signatures)]
+    model.signature_names = ["_" for _ in range(n_signatures)]
     model.sample_names = counts.columns
     model.n_samples = len(counts.columns)
     model.given_signature_embeddings = None
@@ -79,65 +84,54 @@ def model_init(model, counts, W_init, alpha_init, L_init, U_init, sigma_sq_init)
 
 
 @pytest.fixture
-def objective_init(path):
-    return np.load(f"{path}_objective_init.npy")
+def objective_init(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/objective_init_{path_suffix}")
+
+
+def test_objective_function(model_init, objective_init):
+    assert np.allclose(model_init.objective_function(), objective_init)
 
 
 @pytest.fixture
-def surrogate_objective_init(path):
-    return np.load(f"{path}_surrogate_objective_init.npy")
+def surrogate_objective_init(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/surrogate_objective_init_{path_suffix}")
+
+
+def test_surrogate_objective_function(model_init, surrogate_objective_init):
+    assert np.allclose(
+        model_init._surrogate_objective_function(), surrogate_objective_init
+    )
 
 
 @pytest.fixture
-def W_updated_Lee(path):
-    return np.load(f"{path}_W_Lee_updated.npy")
+def W_updated(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/W_updated_{path_suffix}")
 
 
 @pytest.fixture
-def W_updated_surrogate(path):
-    return np.load(f"{path}_W_surrogate_updated.npy")
+def alpha_updated(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/alpha_updated_{path_suffix}")
 
 
 @pytest.fixture
-def alpha_updated(path):
-    return np.load(f"{path}_alpha_updated.npy")
+def L_updated(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/L_updated_{path_suffix}")
 
 
 @pytest.fixture
-def L_updated(path):
-    return np.load(f"{path}_L_updated.npy")
+def U_updated(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/U_updated_{path_suffix}")
 
 
 @pytest.fixture
-def U_updated(path):
-    return np.load(f"{path}_U_updated.npy")
+def sigma_sq_updated(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/sigma_sq_updated_{path_suffix}")
 
 
-@pytest.fixture
-def sigma_sq_updated(path):
-    return np.load(f"{path}_sigma_sq_updated.npy")
-
-
-class TestCorrNMFDet:
-    def test_objective_function(self, model_init, objective_init):
-        assert np.allclose(model_init.objective_function(), objective_init)
-
-    def test_surrogate_objective_function(
-        self, model_init, _p, surrogate_objective_init
-    ):
-        assert np.allclose(
-            model_init._surrogate_objective_function(_p), surrogate_objective_init
-        )
-
-    def test_update_W_Lee(self, model_init, _p, W_updated_Lee):
-        model_init.update_W = "1999-Lee"
-        model_init._update_W(_p)
-        assert np.allclose(model_init.W, W_updated_Lee)
-
-    def test_update_W_surrogate(self, model_init, _p, W_updated_surrogate):
-        model_init.update_W = "surrogate"
-        model_init._update_W(_p)
-        assert np.allclose(model_init.W, W_updated_surrogate)
+class TestUpdatesCorrNMFDet:
+    def test_update_W(self, model_init, W_updated):
+        model_init._update_W()
+        assert np.allclose(model_init.W, W_updated)
 
     def test_update_alpha(self, model_init, alpha_updated):
         model_init._update_alpha()
@@ -159,43 +153,47 @@ class TestCorrNMFDet:
         model_init._update_sigma_sq()
         assert np.allclose(model_init.sigma_sq, sigma_sq_updated)
 
+    def test_given_signatures(self, n_signatures, counts):
+        for n_given_signatures in range(1, n_signatures + 1):
+            given_signatures = counts.iloc[:, :n_given_signatures].astype(float).copy()
+            given_signatures /= given_signatures.sum(axis=0)
+            model = corrnmf_det.CorrNMFDet(
+                n_signatures=n_signatures,
+                dim_embeddings=n_signatures,
+                min_iterations=3,
+                max_iterations=3,
+            )
+            model.fit(counts, given_signatures=given_signatures)
+            assert np.allclose(
+                given_signatures, model.signatures.iloc[:, :n_given_signatures]
+            )
 
-@pytest.mark.parametrize("n_signatures", [1, 2])
-def test_given_signatures(counts, n_signatures):
-    given_signatures = counts.iloc[:, :n_signatures].astype(float).copy()
-    given_signatures /= given_signatures.sum(axis=0)
-    model = corrnmf_det.CorrNMFDet(
-        n_signatures=n_signatures,
-        dim_embeddings=n_signatures,
-        min_iterations=3,
-        max_iterations=3,
-    )
-    model.fit(counts, given_signatures=given_signatures)
-    assert np.allclose(given_signatures, model.signatures)
+    def test_given_signature_embeddings(self, n_signatures, counts):
+        for dim_embeddings in range(1, n_signatures + 1):
+            given_signature_embeddings = np.random.uniform(
+                size=(dim_embeddings, n_signatures)
+            )
+            model = corrnmf_det.CorrNMFDet(
+                n_signatures=n_signatures,
+                dim_embeddings=dim_embeddings,
+                min_iterations=3,
+                max_iterations=3,
+            )
+            model.fit(counts, given_signature_embeddings=given_signature_embeddings)
+            assert np.allclose(given_signature_embeddings, model.L)
 
+    def test_given_sample_embeddings(self, n_signatures, counts):
+        n_samples = len(counts.columns)
 
-@pytest.mark.parametrize("n_signatures,dim_embeddings", [(1, 1), (2, 1), (2, 2)])
-def test_given_signature_embeddings(counts, n_signatures, dim_embeddings):
-    given_signature_embeddings = np.random.uniform(size=(dim_embeddings, n_signatures))
-    model = corrnmf_det.CorrNMFDet(
-        n_signatures=n_signatures,
-        dim_embeddings=dim_embeddings,
-        min_iterations=3,
-        max_iterations=3,
-    )
-    model.fit(counts, given_signature_embeddings=given_signature_embeddings)
-    assert np.allclose(given_signature_embeddings, model.L)
-
-
-@pytest.mark.parametrize("n_signatures,dim_embeddings", [(1, 1), (2, 1), (2, 2)])
-def test_given_sample_embeddings(counts, n_signatures, dim_embeddings):
-    n_samples = len(counts.columns)
-    given_sample_embeddings = np.random.uniform(size=(dim_embeddings, n_samples))
-    model = corrnmf_det.CorrNMFDet(
-        n_signatures=n_signatures,
-        dim_embeddings=dim_embeddings,
-        min_iterations=3,
-        max_iterations=3,
-    )
-    model.fit(counts, given_sample_embeddings=given_sample_embeddings)
-    assert np.allclose(given_sample_embeddings, model.U)
+        for dim_embeddings in range(1, n_signatures + 1):
+            given_sample_embeddings = np.random.uniform(
+                size=(dim_embeddings, n_samples)
+            )
+            model = corrnmf_det.CorrNMFDet(
+                n_signatures=n_signatures,
+                dim_embeddings=dim_embeddings,
+                min_iterations=3,
+                max_iterations=3,
+            )
+            model.fit(counts, given_sample_embeddings=given_sample_embeddings)
+            assert np.allclose(given_sample_embeddings, model.U)

@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,31 +12,28 @@ PATH_TEST_DATA = f"{PATH}/nmf_framework/klnmf"
 
 @pytest.fixture
 def counts():
-    return pd.read_csv(f"{PATH}/nmf_framework/counts.csv", index_col=0)
+    return pd.read_csv(f"{PATH_TEST_DATA}/counts.csv", index_col=0)
 
 
 @pytest.fixture(params=[1, 2])
-def model(request):
-    return klnmf.KLNMF(n_signatures=request.param)
+def n_signatures(request):
+    return request.param
 
 
 @pytest.fixture
-def path(model):
-    return f"{PATH_TEST_DATA}/klnmf_nsigs{model.n_signatures}"
+def W_init(n_signatures):
+    return np.load(f"{PATH_TEST_DATA}/W_init_nsigs{n_signatures}.npy")
 
 
 @pytest.fixture
-def W_init(path):
-    return np.load(f"{path}_W_init.npy")
+def H_init(n_signatures):
+    return np.load(f"{PATH_TEST_DATA}/H_init_nsigs{n_signatures}.npy")
 
 
 @pytest.fixture
-def H_init(path):
-    return np.load(f"{path}_H_init.npy")
-
-
-@pytest.fixture
-def model_init(model, counts, W_init, H_init):
+def model_init(counts, W_init, H_init):
+    n_signatures = W_init.shape[1]
+    model = klnmf.KLNMF(n_signatures=n_signatures)
     model.X = counts.values
     model.W = W_init
     model.H = H_init
@@ -42,37 +41,42 @@ def model_init(model, counts, W_init, H_init):
 
 
 @pytest.fixture
-def objective_init(path):
-    return np.load(f"{path}_objective_init.npy")
+def objective_init(n_signatures):
+    return np.load(f"{PATH_TEST_DATA}/objective_init_nsigs{n_signatures}.npy")
 
 
-@pytest.fixture
-def W_updated(path):
-    return np.load(f"{path}_W_updated.npy")
+def test_objective_function(model_init, objective_init):
+    assert np.allclose(model_init.objective_function(), objective_init)
 
 
-@pytest.fixture
-def H_updated(path):
-    return np.load(f"{path}_H_updated.npy")
+@pytest.mark.parametrize("update_method", ["mu-standard", "mu-joint"])
+class TestUpdatesKLNMF:
+    @pytest.fixture
+    def WH_updated(self, n_signatures, update_method):
+        with open(
+            f"{PATH_TEST_DATA}/WH_updated_{update_method}_nsigs{n_signatures}.pkl", "rb"
+        ) as f:
+            WH_updated = pickle.load(f)
+        return WH_updated
 
-
-class TestKLNMF:
-    def test_objective_function(self, model_init, objective_init):
-        assert np.allclose(model_init.objective_function(), objective_init)
-
-    def test_update_W(self, model_init, W_updated):
-        model_init._update_W()
+    def test_update_WH(self, model_init, update_method, WH_updated):
+        model_init.update_method = update_method
+        model_init._update_WH()
+        W_updated, H_updated = WH_updated
         assert np.allclose(model_init.W, W_updated)
-
-    def test_update_H(self, model_init, H_updated):
-        model_init._update_H()
         assert np.allclose(model_init.H, H_updated)
 
-
-@pytest.mark.parametrize("n_signatures", [1, 2])
-def test_given_signatures(counts, n_signatures):
-    given_signatures = counts.iloc[:, :n_signatures].astype(float).copy()
-    given_signatures /= given_signatures.sum(axis=0)
-    model = klnmf.KLNMF(n_signatures=n_signatures, min_iterations=3, max_iterations=3)
-    model.fit(counts, given_signatures=given_signatures)
-    assert np.allclose(given_signatures, model.signatures)
+    def test_given_signatures(self, n_signatures, update_method, counts):
+        for n_given_signatures in range(1, n_signatures + 1):
+            given_signatures = counts.iloc[:, :n_given_signatures].astype(float).copy()
+            given_signatures /= given_signatures.sum(axis=0)
+            model = klnmf.KLNMF(
+                n_signatures=n_signatures,
+                update_method=update_method,
+                min_iterations=3,
+                max_iterations=3,
+            )
+            model.fit(counts, given_signatures=given_signatures)
+            assert np.allclose(
+                given_signatures, model.signatures.iloc[:, :n_given_signatures]
+            )

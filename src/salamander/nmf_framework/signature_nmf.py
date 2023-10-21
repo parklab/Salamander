@@ -4,7 +4,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ..plot import corr_plot, exposures_plot, paper_style, signatures_plot
+from ..plot import (
+    corr_plot,
+    embeddings_plot,
+    exposures_plot,
+    salamander_style,
+    signatures_plot,
+)
 from ..utils import type_checker, value_checker
 
 
@@ -62,8 +68,8 @@ class SignatureNMF(ABC):
 
         - fit:
             Run the NMF algorithm for a given mutation count data. Every
-            fit method should also implement a "refitting version", where the signatures
-            W are known in advance and fixed.
+            fit method should also implement a version that allows fixing
+            arbitrary many a priori known signatures.
 
         - plot_embeddings:
             Plot the sample (and potentially the signature) embeddings in 2D.
@@ -139,7 +145,7 @@ class SignatureNMF(ABC):
         value_checker("init_method", init_method, init_methods)
 
         self.n_signatures = n_signatures
-        self.signature_names = np.array([f"Sig{k+1}" for k in range(n_signatures)])
+        self.signature_names = None
         self.init_method = init_method
         self.min_iterations = min_iterations
         self.max_iterations = max_iterations
@@ -148,6 +154,7 @@ class SignatureNMF(ABC):
         # initialize data/fitting dependent attributes
         self.X = None
         self.n_features = 0
+        self.n_given_signatures = 0
         self.n_samples = 0
         self.mutation_types = np.empty(0, dtype=str)
         self.sample_names = np.empty(0, dtype=str)
@@ -234,21 +241,23 @@ class SignatureNMF(ABC):
         """
         Check if the given signatures are compatible with the
         number of signatures of the algorithm and the
-        mutation types of the input data and.
+        mutation types of the input data.
 
         given_signatures: pd.DataFrame
             Known signatures that should be fixed by the algorithm.
+            The number of known signatures can be less or equal to the
+            number of signatures specified in the algorithm instance.
         """
         type_checker("given_signatures", given_signatures, pd.DataFrame)
         given_mutation_types = given_signatures.index.to_numpy(dtype=str)
         compatible = (
             np.array_equal(given_mutation_types, self.mutation_types)
-            and given_signatures.shape[1] == self.n_signatures
+            and given_signatures.shape[1] <= self.n_signatures
         )
 
         if not compatible:
             raise ValueError(
-                f"You have to provide {self.n_signatures} signatures with "
+                f"You have to provide at most {self.n_signatures} signatures with "
                 f"mutation types matching to your data."
             )
 
@@ -265,7 +274,6 @@ class SignatureNMF(ABC):
             decompose the mutation count matrix X into a signature matrix W and
             an exposure matrix H, both W and H have to be initialized.
         """
-        pass
 
     def _setup_data_parameters(self, data: pd.DataFrame):
         """
@@ -295,15 +303,13 @@ class SignatureNMF(ABC):
             The named mutation count data of shape (n_features, n_samples).
 
         given_signatures: pd.DataFrame, by default None
-            In the case of refitting, 'given_signatures'
-            are the a priori known signatures.
-            The number of signatures has to match to the NMF algorithm
-            instance and the mutation type names have to match to the names
-            of the mutation count data.
+            A priori known signatures. The number of given signatures has
+            to be less or equal to the number of signatures of NMF
+            algorithm instance, and the mutation type names have to match
+            the mutation types of the count data.
         """
-        pass
 
-    @paper_style
+    @salamander_style
     def plot_signatures(
         self,
         catalog=None,
@@ -315,11 +321,6 @@ class SignatureNMF(ABC):
     ):
         """
         Plot the signatures, see plot.py for the implementation of signatures_plot.
-
-        Input:
-        ------
-        **kwargs:
-            arguments to be passed to signatures_plot
         """
         axes = signatures_plot(
             self.signatures,
@@ -335,9 +336,10 @@ class SignatureNMF(ABC):
 
         return axes
 
-    @paper_style
+    @salamander_style
     def plot_exposures(
         self,
+        sample_order=None,
         reorder_signatures=True,
         annotate_samples=True,
         colors=None,
@@ -349,14 +351,10 @@ class SignatureNMF(ABC):
         """
         Visualize the exposures as a stacked bar chart,
         see plot.py for the implementation.
-
-        Input:
-        ------
-        **kwargs:
-            arguments to be passed to exposure_plot
         """
         ax = exposures_plot(
             exposures=self.exposures,
+            sample_order=sample_order,
             reorder_signatures=reorder_signatures,
             annotate_samples=annotate_samples,
             colors=colors,
@@ -364,7 +362,6 @@ class SignatureNMF(ABC):
             ax=ax,
             **kwargs,
         )
-
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")
 
@@ -377,7 +374,6 @@ class SignatureNMF(ABC):
         Every child class of SignatureNMF has to implement a function that
         returns the signature correlation matrix as a pandas dataframe.
         """
-        pass
 
     @property
     @abstractmethod
@@ -386,7 +382,6 @@ class SignatureNMF(ABC):
         Every child class of SignatureNMF has to implement a function that
         returns the sample correlation matrix as a pandas dataframe.
         """
-        pass
 
     def plot_correlation(self, data="signatures", annot=False, outfile=None, **kwargs):
         """
@@ -414,8 +409,90 @@ class SignatureNMF(ABC):
         return clustergrid
 
     @abstractmethod
-    def plot_embeddings(self):
+    def _get_embedding_data(self) -> np.ndarray:
         """
-        Plot the sample (and potentially the signature) embeddings in 2D.
+        Get the data points for the dimensionality reduction / embedding plot.
+        One data point corresponds to a row of the embedding data.
+        Usually, these are the transposed exposures.
         """
-        pass
+
+    @abstractmethod
+    def _get_default_embedding_annotations(self) -> np.ndarray:
+        """
+        Get the annotations of the data points in the embedding plot.
+        """
+
+    def plot_embeddings(
+        self,
+        method="umap",
+        normalize=False,
+        annotations=None,
+        annotation_kwargs=None,
+        ax=None,
+        outfile=None,
+        **kwargs,
+    ):
+        """
+        Plot a dimensionality reduction of the exposure representation.
+        In most NMF algorithms, this is just the exposures of the samples.
+        In CorrNMF, the exposures matrix is refactored, and there are both
+        sample and signature exposures in a shared embedding space.
+
+        If the embedding dimension is one or two, the embeddings are be plotted
+        directly, ignoring the chosen method.
+        See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
+
+        Parameters
+        ----------
+        method : str, default='umap'
+            Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
+            will be applied to plot the data in 2D space.
+
+        normalize : bool, default=False
+            If True, normalize the data before applying the dimensionality reduction.
+
+        annotations : list[str], default=None
+            Annotations per data point, e.g. the sample names. If None,
+            the algorithm-specific default annotations are used.
+            For example, CorrNMF annotates the signature embeddings by default.
+            Note that there are 'n_signatures' + 'n_samples' data points in CorrNMF,
+            i.e. the first 'n_signatures' elements in 'annotations'
+            are the signature annotations, not any sample annotations.
+
+        annotation_kwargs : dict, default=None
+            keyword arguments to pass to matplotlibs plt.txt()
+
+        ax : matplotlib.axes.Axes, default=None
+            Pre-existing axes for the plot. Otherwise, an axes is created.
+
+        outfile : str, default=None
+            If not None, the figure will be saved in the specified file path.
+
+        **kwargs :
+            keyword arguments to pass to seaborn's scatterplot
+
+        Returns
+        -------
+        ax : matplotlib.axes.Axes
+            The matplotlib axes containing the plot.
+        """
+        # one data point corresponds to a row of embedding_data
+        embedding_data = self._get_embedding_data()
+
+        if annotations is None:
+            annotations = self._get_default_embedding_annotations()
+
+        ax = embeddings_plot(
+            embedding_data,
+            method,
+            normalize,
+            annotations,
+            annotation_kwargs,
+            ax,
+            **kwargs,
+        )
+
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches="tight")
+
+        return ax
