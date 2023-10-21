@@ -339,6 +339,7 @@ class SignatureNMF(ABC):
     @salamander_style
     def plot_exposures(
         self,
+        sample_order=None,
         reorder_signatures=True,
         annotate_samples=True,
         colors=None,
@@ -353,6 +354,7 @@ class SignatureNMF(ABC):
         """
         ax = exposures_plot(
             exposures=self.exposures,
+            sample_order=sample_order,
             reorder_signatures=reorder_signatures,
             annotate_samples=annotate_samples,
             colors=colors,
@@ -360,7 +362,6 @@ class SignatureNMF(ABC):
             ax=ax,
             **kwargs,
         )
-
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")
 

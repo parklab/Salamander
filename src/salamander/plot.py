@@ -513,27 +513,77 @@ def signatures_plot(
     return axes
 
 
-def _reorder_exposures(exposures: pd.DataFrame, reorder_signatures=True):
+def _get_sample_order(exposures: pd.DataFrame, normalize=True):
     """
-    Reorder the samples using hierarchical clustering and
-    reorder the signatures by their total relative exposure.
-    """
-    exposures_normalized = exposures / exposures.sum(axis=0)
+    Compute the aesthetically most pleasing order of the samples
+    for a stacked bar chart of the exposures.
 
-    d = pdist(exposures_normalized.T)
+    Parameters
+    ----------
+    exposures : pd.DataFrame of shape (n_signatures, n_samples)
+        The named exposure matrix
+
+    normalize : bool, default=True
+        If True, the exposures are normalized before computing the
+        hierarchical clustering.
+
+    Returns
+    -------
+    sample_order : np.ndarray
+        The ordered sample names
+    """
+    if normalize:
+        # not in-place
+        exposures = exposures / exposures.sum(axis=0)
+
+    d = pdist(exposures.T)
     linkage = fastcluster.linkage(d)
     # get the optimal sample order that is consistent
     # with the hierarchical clustering linkage
     sample_order = hierarchy.leaves_list(hierarchy.optimal_leaf_ordering(linkage, d))
-    samples_reordered = exposures_normalized.columns[sample_order]
-    exposures_reordered = exposures_normalized[samples_reordered]
+    sample_order = exposures.columns[sample_order].to_numpy()
+    return sample_order
 
-    # order the signatures by their total exposure
+
+def _reorder_exposures(
+    exposures: pd.DataFrame, sample_order=None, reorder_signatures=True
+):
+    """
+    Reorder the samples with hierarchical clustering and
+    reorder the signatures by their total relative exposure.
+
+    Parameters
+    ----------
+    exposures : pd.DataFrame of shape (n_signatures, n_samples)
+        The named exposure matrix
+
+    sample_order : np.ndarray, default=None
+        A predefined order of the samples as a list of sample names.
+        If None, hierarchical clustering is used to compute the
+        aesthetically most pleasing order.
+
+    reorder_signatures : bool, default=True
+        If True, the signatures will be reordered such that the
+        total relative exposures of the signatures decrease from the bottom
+        to the top signature in the stacked bar chart.
+
+    Returns
+    -------
+    exposures_reordered : pd.DataFrame of shape (n_signatures, n_samples)
+        The reorderd named exposure matrix
+    """
+    if sample_order is None:
+        sample_order = _get_sample_order(exposures)
+
+    exposures_reordered = exposures[sample_order]
+
+    # order the signatures by their total relative exposure
     if reorder_signatures:
-        signatures_reordered = (
-            exposures_reordered.sum(axis=1).sort_values(ascending=False).index
+        exposures_normalized = exposures_reordered / exposures_reordered.sum(axis=0)
+        signature_order = (
+            exposures_normalized.sum(axis=1).sort_values(ascending=False).index
         )
-        exposures_reordered = exposures_reordered.reindex(signatures_reordered)
+        exposures_reordered = exposures_reordered.reindex(signature_order)
 
     return exposures_reordered
 
@@ -541,6 +591,7 @@ def _reorder_exposures(exposures: pd.DataFrame, reorder_signatures=True):
 @salamander_style
 def exposures_plot(
     exposures: pd.DataFrame,
+    sample_order=None,
     reorder_signatures=True,
     annotate_samples=True,
     colors=None,
@@ -549,13 +600,49 @@ def exposures_plot(
     **kwargs,
 ):
     """
-    Visualize the exposures using a stacked bar chart.
+    Visualize the exposures with a stacked bar chart.
+
+    Parameter
+    ---------
+    exposures : pd.DataFrame of shape (n_signatures, n_samples)
+        The named exposure matrix.
+
+    sample_order : np.ndarray, default=None
+        A predefined order of the samples as a list of sample names.
+        If None, hierarchical clustering is used to compute the
+        aesthetically most pleasing order.
+
+    reorder_signatures : bool, default=True
+        If True, the signatures will be reordered such that the
+        total relative exposures of the signatures decrease from the bottom
+        to the top signature in the stacked bar chart.
+
+    annotate_samples : bool, default=True
+        If True, the x-axis is annotated with the sample names.
+
+    colors : list of length n_signatures, default=None
+        Colors to pass to matplotlibs ax.bar, one per signature.
+
+    n_col_legend : int, default=1
+        The number of columns of the legend.
+
+    ax : matplotlib.axes.Axes, default=None
+        Pre-existing axes for the plot. Otherwise, create an axis internally.
+
+    kwargs : dict
+        Any keyword arguments to be passed to matplotlibs ax.bar.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The matplotlib axes containing the plot.
     """
     n_signatures, n_samples = exposures.shape
-    exposures_reordered = _reorder_exposures(
-        exposures, reorder_signatures=reorder_signatures
+    # not in-place
+    exposures = exposures / exposures.sum(axis=0)
+    exposures = _reorder_exposures(
+        exposures, sample_order=sample_order, reorder_signatures=reorder_signatures
     )
-    samples = exposures_reordered.columns
 
     if ax is None:
         _, ax = plt.subplots(figsize=(0.3 * n_samples, 4))
@@ -565,8 +652,8 @@ def exposures_plot(
 
     bottom = np.zeros(n_samples)
 
-    for signature, color in zip(exposures_reordered.T, colors):
-        signature_exposures = exposures_reordered.T[signature].to_numpy()
+    for signature, color in zip(exposures.T, colors):
+        signature_exposures = exposures.T[signature].to_numpy()
         ax.bar(
             np.arange(n_samples),
             signature_exposures,
@@ -581,7 +668,7 @@ def exposures_plot(
 
     if annotate_samples:
         ax.set_xticks(np.arange(n_samples))
-        ax.set_xticklabels(samples, rotation=90, ha="center", fontsize=10)
+        ax.set_xticklabels(exposures.columns, rotation=90, ha="center", fontsize=10)
 
     else:
         ax.get_xaxis().set_visible(False)

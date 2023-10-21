@@ -16,7 +16,13 @@ import pandas as pd
 from scipy import optimize
 from scipy.spatial.distance import squareform
 
-from ..plot import corr_plot, embeddings_plot, salamander_style, signatures_plot
+from ..plot import (
+    _get_sample_order,
+    corr_plot,
+    embeddings_plot,
+    salamander_style,
+    signatures_plot,
+)
 from ..utils import type_checker, value_checker
 from . import _utils_corrnmf
 from .corrnmf_det import CorrNMFDet
@@ -455,6 +461,7 @@ class MultimodalCorrNMF:
     @salamander_style
     def plot_exposures(
         self,
+        sample_order=None,
         reorder_signatures=True,
         annotate_samples=True,
         colors=None,
@@ -480,10 +487,20 @@ class MultimodalCorrNMF:
         if colors is None:
             colors = [None for _ in range(self.n_modalities)]
 
+        if sample_order is None:
+            all_exposures = pd.concat([model.exposures for model in self.models])
+            sample_order = _get_sample_order(all_exposures)
+
         for n, (ax, model, cols) in enumerate(zip(axes, self.models, colors)):
+            if n < self.n_modalities - 1:
+                annotate = False
+            else:
+                annotate = annotate_samples
+
             ax = model.plot_exposures(
+                sample_order=sample_order,
                 reorder_signatures=reorder_signatures,
-                annotate_samples=annotate_samples,
+                annotate_samples=annotate,
                 colors=cols,
                 ncol_legend=ncol_legend,
                 ax=ax,
