@@ -679,15 +679,56 @@ class MultimodalCorrNMF:
         self,
         in_modality=None,
         out_modalities="all",
-        normalize=True,
         colors=None,
         annotate_mutation_types=False,
         figsize=None,
         outfile=None,
         **kwargs,
     ):
+        """
+        For the signatures of one modality, plot the co-occuring spectra
+        in other modalities. This is achieved by interpreting a signature
+        embedding as a sample embedding and using the resulting exposures to
+        compute distributions over mutation types in different modalities.
+
+        Parameters
+        ----------
+        in_modality : str
+            The modality name of the signatures of interest, e.g. "SBS".
+
+        out_modalities : list or str, default="all"
+            A list of modalities to convert the 'in_modality' signatures
+            into, e.g. ["Indel", "SV"]. A single string can also be provided
+            to select only one 'out_modality'. By default, all modalities
+            other than the 'in_modality' are selected.
+
+        colors : list, default=None
+            A list of length '1 + len(out_modalities)' of colors to use
+            for the signature plots of the input modalitiy signatures
+            and the co-occuring spectra in the output modalites.
+
+        annotate_mutation_types : bool, default=False
+            If True, the x-axis of the spectra plots will be annotated
+            with the mutation types of the respective modalities.
+
+        figsize : tuple, default=None
+            The size of the matplotlib figure. If None, the figure size
+            is computed internally based on the number of input
+            signatures and output modalities.
+
+        outfile : str, default=None
+            If not None, the figure will be saved to the provided path.
+
+        kwargs : dict
+            Any keyword arguments to be passed to matplotlibs ax.bar.
+
+        Returns
+        -------
+        axes : np.ndarray
+            An array of matplotlib axes containing the plots.
+        """
         # result[0] are the 'in_modality' signatures
-        results = self.feature_change(in_modality, out_modalities, normalize)
+        results = self.feature_change(in_modality, out_modalities)
         n_signatures = results[0].shape[1]
         n_feature_spaces = len(results)
 
@@ -695,7 +736,7 @@ class MultimodalCorrNMF:
             colors = [None for _ in range(n_feature_spaces)]
 
         if figsize is None:
-            figsize = (8 * n_feature_spaces, 2 * n_signatures)
+            figsize = (4 * n_feature_spaces, n_signatures)
 
         fig, axes = plt.subplots(n_signatures, n_feature_spaces, figsize=figsize)
         fig.suptitle("Signature feature change")

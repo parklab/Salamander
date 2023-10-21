@@ -68,8 +68,8 @@ class SignatureNMF(ABC):
 
         - fit:
             Run the NMF algorithm for a given mutation count data. Every
-            fit method should also implement a "refitting version", where the signatures
-            W are known in advance and fixed.
+            fit method should also implement a version that allows fixing
+            arbitrary many a priori known signatures.
 
         - plot_embeddings:
             Plot the sample (and potentially the signature) embeddings in 2D.

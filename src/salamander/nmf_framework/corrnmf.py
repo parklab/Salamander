@@ -52,8 +52,8 @@ class CorrNMF(SignatureNMF):
 
         - fit:
             Run CorrNMF for a given mutation count data. Every
-            fit method should also implement a "refitting version", where the signatures
-            W are known in advance and fixed
+            fit method should also implement a version that allows fixing
+            arbitrary many a priori known signatures.
 
 
     The following attributes are implemented in the abstract class CNMF:
