@@ -39,6 +39,11 @@ def alpha_init(path_suffix):
 
 
 @pytest.fixture
+def beta_init(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/beta_init_{path_suffix}")
+
+
+@pytest.fixture
 def _p(path_suffix):
     return np.load(f"{PATH_TEST_DATA}/p_{path_suffix}")
 
@@ -64,7 +69,7 @@ def sigma_sq_init(path_suffix):
 
 
 @pytest.fixture
-def model_init(counts, W_init, alpha_init, L_init, U_init, sigma_sq_init):
+def model_init(counts, W_init, alpha_init, beta_init, L_init, U_init, sigma_sq_init):
     n_signatures, dim_embeddings = L_init.shape
     model = corrnmf_det.CorrNMFDet(
         n_signatures=n_signatures, dim_embeddings=dim_embeddings
@@ -72,6 +77,7 @@ def model_init(counts, W_init, alpha_init, L_init, U_init, sigma_sq_init):
     model.X = counts.values
     model.W = W_init
     model.alpha = alpha_init
+    model.beta = beta_init
     model.L = L_init
     model.U = U_init
     model.sigma_sq = sigma_sq_init
@@ -114,6 +120,11 @@ def alpha_updated(path_suffix):
 
 
 @pytest.fixture
+def beta_updated(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/beta_updated_{path_suffix}")
+
+
+@pytest.fixture
 def L_updated(path_suffix):
     return np.load(f"{PATH_TEST_DATA}/L_updated_{path_suffix}")
 
@@ -136,6 +147,10 @@ class TestUpdatesCorrNMFDet:
     def test_update_alpha(self, model_init, alpha_updated):
         model_init._update_alpha()
         assert np.allclose(model_init.alpha, alpha_updated)
+
+    def test_update_beta(self, model_init, _p, beta_updated):
+        model_init._update_beta(_p)
+        assert np.allclose(model_init.beta, beta_updated)
 
     def test_p(self, model_init, _p):
         p_computed = model_init._update_p()

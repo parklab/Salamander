@@ -13,6 +13,8 @@ from ..plot import (
 )
 from ..utils import type_checker, value_checker
 
+EPSILON = np.finfo(np.float32).eps
+
 
 class SignatureNMF(ABC):
     """
@@ -286,7 +288,7 @@ class SignatureNMF(ABC):
             Samples are expected to corresponding to columns.
         """
         type_checker("data", data, pd.DataFrame)
-        self.X = data.values
+        self.X = data.values.clip(EPSILON)
         self.n_features, self.n_samples = data.shape
         self.mutation_types = data.index.values.astype(str)
         self.sample_names = data.columns.values.astype(str)

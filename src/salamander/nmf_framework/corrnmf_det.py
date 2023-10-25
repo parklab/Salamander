@@ -26,6 +26,9 @@ class CorrNMFDet(CorrNMF):
         - _update_alpha:
             update the sample exposure biases \alpha
 
+        - _update_beta:
+            update the signature biases \beta
+
         - _update_sigma_sq:
             update the variance \sigma^2 assumed in the generative model
 
@@ -49,7 +52,10 @@ class CorrNMFDet(CorrNMF):
     """
 
     def _update_alpha(self):
-        self.alpha = _utils_corrnmf.update_alpha(self.X, self.L, self.U)
+        self.alpha = _utils_corrnmf.update_alpha(self.X, self.beta, self.L, self.U)
+
+    def _update_beta(self, p):
+        self.beta = _utils_corrnmf.update_beta(self.X, p, self.alpha, self.L, self.U)
 
     def _update_sigma_sq(self):
         embeddings = np.concatenate([self.L, self.U], axis=1)
@@ -68,21 +74,23 @@ class CorrNMFDet(CorrNMF):
         return p
 
     def _update_l(self, index, aux_row, outer_prods_U):
+        beta = self.beta[index]
+
         def objective_fun(l):
             return _utils_corrnmf.objective_function_embedding(
-                l, self.U, self.alpha, self.sigma_sq, aux_row
+                l, self.U, self.alpha, beta, self.sigma_sq, aux_row
             )
 
         summand_grad = np.sum(aux_row * self.U, axis=1)
 
         def gradient(l):
             return _utils_corrnmf.gradient_embedding(
-                l, self.U, self.alpha, self.sigma_sq, summand_grad
+                l, self.U, self.alpha, beta, self.sigma_sq, summand_grad
             )
 
         def hessian(l):
             return _utils_corrnmf.hessian_embedding(
-                l, self.U, self.alpha, self.sigma_sq, outer_prods_U
+                l, self.U, self.alpha, beta, self.sigma_sq, outer_prods_U
             )
 
         l = optimize.minimize(
@@ -117,19 +125,19 @@ class CorrNMFDet(CorrNMF):
 
         def objective_fun(u):
             return _utils_corrnmf.objective_function_embedding(
-                u, self.L, alpha, self.sigma_sq, aux_col
+                u, self.L, alpha, self.beta, self.sigma_sq, aux_col
             )
 
         summand_grad = np.sum(aux_col * self.L, axis=1)
 
         def gradient(u):
             return _utils_corrnmf.gradient_embedding(
-                u, self.L, alpha, self.sigma_sq, summand_grad
+                u, self.L, alpha, self.beta, self.sigma_sq, summand_grad
             )
 
         def hessian(u):
             return _utils_corrnmf.hessian_embedding(
-                u, self.L, alpha, self.sigma_sq, outer_prods_L
+                u, self.L, alpha, self.beta, self.sigma_sq, outer_prods_L
             )
 
         u = optimize.minimize(
@@ -227,10 +235,11 @@ class CorrNMFDet(CorrNMF):
             n_iteration += 1
 
             if verbose and n_iteration % 100 == 0:
-                print("iteration ", n_iteration)
+                print(f"iteration: {n_iteration}; objective: {of_values[-1]:.2f}")
 
             self._update_alpha()
             p = self._update_p()
+            self._update_beta(p)
             self._update_LU(p, given_signature_embeddings, given_sample_embeddings)
             self._update_sigma_sq()
 

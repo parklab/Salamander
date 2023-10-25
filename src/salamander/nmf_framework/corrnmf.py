@@ -35,6 +35,9 @@ class CorrNMF(SignatureNMF):
         - _update_alpha:
             update the sample exposure biases \alpha
 
+        - _update_beta:
+            update the signature exposure biases \beta
+
         - _update_sigma_sq:
             update the embedding distribution variance \sigma^2
 
@@ -162,9 +165,10 @@ class CorrNMF(SignatureNMF):
 
         self.dim_embeddings = dim_embeddings
 
-        # initialize data/fitting dependent attributes
+        # initialize data/fitting-dependent attributes
         self.W = None
         self.alpha = None
+        self.beta = None
         self.L = None
         self.U = None
         self.sigma_sq = None
@@ -180,10 +184,11 @@ class CorrNMF(SignatureNMF):
     def exposures(self) -> pd.DataFrame:
         """
         In contrast to the classical NMF framework, the exposure matrix is
-        restructured and determined by the signature and sample embeddings.
+        restructured and determined by the signature & sample biases and
+        embeddings.
         """
         exposures = pd.DataFrame(
-            np.exp(self.alpha + self.L.T @ self.U),
+            np.exp(self.alpha + self.beta[:, np.newaxis] + self.L.T @ self.U),
             index=self.signature_names,
             columns=self.sample_names,
         )
@@ -194,7 +199,7 @@ class CorrNMF(SignatureNMF):
         """
         There are n_features * n_signatures parameters corresponding to
         the signature matrix, each embedding corresponds to dim_embeddings parameters,
-        and each sample has a bias parameter.
+        and each signature & sample has a bias.
         Finally, the model variance is a single positive real number.
 
         Note: We do not include the number of auxiliary parameters p.
@@ -203,7 +208,7 @@ class CorrNMF(SignatureNMF):
         n_parameters_embeddings = self.dim_embeddings * (
             self.n_signatures + self.n_samples
         )
-        n_parameters_biases = self.n_samples
+        n_parameters_biases = self.n_samples + self.n_signatures
         n_parameters_exposures = n_parameters_embeddings + n_parameters_biases
         n_parameters = n_parameters_signatures + n_parameters_exposures + 1
 
@@ -357,14 +362,26 @@ class CorrNMF(SignatureNMF):
         init_kwargs=None,
     ):
         """
-        Initialize the signature matrix W, sample biases alpha, the squared variance,
-        and the signature and sample embeddings.
+        Initialize the signature matrix W, sample biases alpha, signature biases beta,
+        the squared variance, and the signature and sample embeddings.
         The signatures or signature embeddings can also be provided by the user.
 
-        Input:
-        ------
-        init_kwargs: dict
-            Any further arguments to be passed to the initialization method.
+        Parameters
+        ----------
+        given_signatures: pd.DataFrame, default=None
+            A priori known signatures. The number of given signatures has
+            to be less or equal to the number of signatures of NMF
+            algorithm instance, and the mutation type names have to match
+            the mutation types of the count data.
+
+        given_signature_embeddings : np.ndarray, default=None
+            A priori known signature embeddings of shape (dim_embeddings, n_signatures).
+
+        given_sample_embeddings : np.ndarray, default=None
+            A priori known sample embeddings of shape (dim_embeddings, n_samples).
+
+        init_kwargs : dict
+            Any further keyword arguments to pass to the initialization method.
             This includes, for example, a possible 'seed' keyword argument
             for all stochastic methods.
         """
@@ -417,7 +434,8 @@ class CorrNMF(SignatureNMF):
 
         self.W /= np.sum(self.W, axis=0)
         self.W = self.W.clip(EPSILON)
-        self.alpha = np.zeros(self.n_samples, dtype=float)
+        self.alpha = np.zeros(self.n_samples)
+        self.beta = np.zeros(self.n_signatures)
         self.sigma_sq = 1.0
         self.L = np.random.multivariate_normal(
             np.zeros(self.dim_embeddings),
@@ -477,6 +495,7 @@ class CorrNMF(SignatureNMF):
             other_signatures, self.signatures, metric=metric
         )
         self.W = self.W[:, reordered_indices]
+        self.beta = self.beta[reordered_indices]
         self.L = self.L[:, reordered_indices]
 
         if keep_names:

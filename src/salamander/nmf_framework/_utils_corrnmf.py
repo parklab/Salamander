@@ -5,7 +5,9 @@ EPSILON = np.finfo(np.float32).eps
 
 
 @njit
-def update_alpha(X: np.ndarray, L: np.ndarray, U: np.ndarray) -> np.ndarray:
+def update_alpha(
+    X: np.ndarray, beta: np.ndarray, L: np.ndarray, U: np.ndarray
+) -> np.ndarray:
     """
     Compute the new sample biases alpha according to the update rule of CorrNMF.
 
@@ -14,8 +16,8 @@ def update_alpha(X: np.ndarray, L: np.ndarray, U: np.ndarray) -> np.ndarray:
     X : np.ndarray of shape (n_features, n_samples)
         data matrix
 
-    a: asdf
-        asdf
+    beta : np.ndarray of shape (n_signatures,)
+        signature biases
 
     L : np.ndarray of shape (dim_embeddings, n_signatures)
         signature embeddings
@@ -26,11 +28,50 @@ def update_alpha(X: np.ndarray, L: np.ndarray, U: np.ndarray) -> np.ndarray:
     Returns
     -------
     alpha : np.ndarray of shape (n_samples,)
-        The new sample biases alpha
+        The new sample biases
     """
-    exp_LTU = np.exp(L.T @ U)
-    alpha = np.log(np.sum(X, axis=0)) - np.log(np.sum(exp_LTU, axis=0))
+    second_term = np.exp(beta[:, np.newaxis] + L.T @ U)
+    alpha = np.log(np.sum(X, axis=0)) - np.log(np.sum(second_term, axis=0))
     return alpha
+
+
+@njit
+def update_beta(
+    X: np.ndarray, p: np.ndarray, alpha: np.ndarray, L: np.ndarray, U: np.ndarray
+) -> np.ndarray:
+    """
+    Compute the new signature biases beta according to the update rule of CorrNMF.
+
+    Parameters
+    ----------
+    X : np.ndarray of shape (n_features, n_samples)
+        data matrix
+
+    alpha : np.ndarray of shape (n_samples,)
+        sample biases
+
+    L : np.ndarray of shape (dim_embeddings, n_signatures)
+        signature embeddings
+
+    U : np.ndarray of shape (dim_embeddings, n_samples)
+        sample embeddings
+
+    Returns
+    -------
+    beta : np.ndarray of shape (n_signatures,)
+        The new signature biases
+    """
+    n_features, n_signatures, n_samples = p.shape
+    first_term = np.zeros(n_signatures)
+
+    for k in range(n_signatures):
+        for v in range(n_features):
+            for d in range(n_samples):
+                first_term[k] += X[v, d] * p[v, k, d]
+
+    second_term = np.exp(alpha + L.T @ U)
+    beta = np.log(first_term) - np.log(np.sum(second_term, axis=1))
+    return beta
 
 
 @njit
@@ -65,10 +106,16 @@ def update_p_unnormalized(W: np.ndarray, H: np.ndarray) -> np.ndarray:
 
 @njit
 def objective_function_embedding(
-    embedding, embeddings_other, alpha, sigma_sq, aux_vec, add_penalty=True
+    embedding,
+    embeddings_other,
+    alpha,
+    beta,
+    sigma_sq,
+    aux_vec,
+    add_penalty=True,
 ):
     r"""
-    The objective function of a signature or sample embedding in CorrNMF.
+    The negative objective function of a signature or sample embedding in CorrNMF.
 
     Parameters
     ----------
@@ -84,6 +131,11 @@ def objective_function_embedding(
         If 'embedding' is a signature embedding, 'alpha' are
         all sample biases. If 'embedding' is a sample embedding,
         'alpha' is the bias of the corresponding sample.
+
+    beta : np.array of shape (n_signatures,) | float
+        If 'embedding' is a signature embedding, 'beta' is
+        the corresponding signature bias. If 'embedding' is a sample embedding,
+        'beta' are all signature biases.
 
     sigma_sq : float
         model variance
@@ -108,8 +160,8 @@ def objective_function_embedding(
     for i in range(n_embeddings_other):
         of_value += scalar_products[i] * aux_vec[i]
 
-    # works for alpha being a scalar or vector
-    of_value -= np.sum(np.exp(alpha + scalar_products))
+    # works for alpha and beta being a scalar or vector
+    of_value -= np.sum(np.exp(alpha + beta + scalar_products))
 
     if add_penalty:
         of_value -= np.dot(embedding, embedding) / (2 * sigma_sq)
@@ -119,11 +171,17 @@ def objective_function_embedding(
 
 @njit
 def gradient_embedding(
-    embedding, embeddings_other, alpha, sigma_sq, summand_grad, add_penalty=True
+    embedding,
+    embeddings_other,
+    alpha,
+    beta,
+    sigma_sq,
+    summand_grad,
+    add_penalty=True,
 ):
     r"""
-    The gradient of the objective function w.r.t. a signature or sample embedding
-    in CorrNMF.
+    The negative gradient of the objective function w.r.t. a signature or
+    sample embedding in CorrNMF.
 
     Parameters
     ----------
@@ -140,6 +198,11 @@ def gradient_embedding(
         all sample biases. If 'embedding' is a sample embedding,
         'alpha' is the bias of the corresponding sample.
 
+    beta : np.array of shape (n_signatures,) | float
+        If 'embedding' is a signature embedding, 'beta' is
+        the corresponding signature bias. If 'embedding' is a sample embedding,
+        'beta' are all signature biases.
+
     sigma_sq : float
         model variance
 
@@ -151,7 +214,10 @@ def gradient_embedding(
         This argument is useful for the implementation of multimodal CorrNMF.
     """
     scalar_products = embeddings_other.T.dot(embedding)
-    gradient = -np.sum(np.exp(alpha + scalar_products) * embeddings_other, axis=1)
+    # works for alpha and beta being a scalar or vector
+    gradient = -np.sum(
+        np.exp(alpha + beta + scalar_products) * embeddings_other, axis=1
+    )
     gradient += summand_grad
 
     if add_penalty:
@@ -165,13 +231,14 @@ def hessian_embedding(
     embedding,
     embeddings_other,
     alpha,
+    beta,
     sigma_sq,
     outer_prods_embeddings_other,
     add_penalty=True,
 ):
     r"""
-    The Hessian of the objective function w.r.t. a signature or sample embedding
-    in CorrNMF.
+    The negative Hessian of the objective function w.r.t. a signature or
+    sample embedding in CorrNMF.
 
     Parameters
     ----------
@@ -187,6 +254,11 @@ def hessian_embedding(
         If 'embedding' is a signature embedding, 'alpha' are
         all sample biases. If 'embedding' is a sample embedding,
         'alpha' is the bias of the corresponding sample.
+
+    beta : np.array of shape (n_signatures,) | float
+        If 'embedding' is a signature embedding, 'beta' is
+        the corresponding signature bias. If 'embedding' is a sample embedding,
+        'beta' are all signature biases.
 
     sigma_sq : float
         model variance
@@ -203,7 +275,8 @@ def hessian_embedding(
         This argument is useful for the implementation of multimodal CorrNMF.
     """
     dim_embeddings, n_embeddings_other = embeddings_other.shape
-    scalings = np.exp(alpha + embeddings_other.T.dot(embedding))
+    scalar_products = embeddings_other.T.dot(embedding)
+    scalings = np.exp(alpha + beta + scalar_products)
     hessian = np.zeros((dim_embeddings, dim_embeddings))
 
     for m1 in range(dim_embeddings):
