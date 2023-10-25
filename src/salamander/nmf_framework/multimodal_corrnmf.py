@@ -493,8 +493,11 @@ class MultimodalCorrNMF:
             colors = [None for _ in range(self.n_modalities)]
 
         if sample_order is None:
-            all_exposures = pd.concat([model.exposures for model in self.models])
-            sample_order = _get_sample_order(all_exposures)
+            all_exposures = [model.exposures for model in self.models]
+            all_exposures_normalized = pd.concat(
+                [df / df.sum(axis=0) for df in all_exposures]
+            )
+            sample_order = _get_sample_order(all_exposures_normalized)
 
         for n, (ax, model, cols) in enumerate(zip(axes, self.models, colors)):
             if n < self.n_modalities - 1:
