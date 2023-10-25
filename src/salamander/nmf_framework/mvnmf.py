@@ -227,7 +227,7 @@ class MvNMF(NMF):
             n_iteration += 1
 
             if verbose and n_iteration % 100 == 0:
-                print(f"iteration {n_iteration}")
+                print(f"iteration: {n_iteration}; objective: {of_values[-1]:.2f}")
 
             self._update_H()
 

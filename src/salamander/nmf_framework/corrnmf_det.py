@@ -235,7 +235,7 @@ class CorrNMFDet(CorrNMF):
             n_iteration += 1
 
             if verbose and n_iteration % 100 == 0:
-                print("iteration ", n_iteration)
+                print(f"iteration: {n_iteration}; objective: {of_values[-1]:.2f}")
 
             self._update_alpha()
             p = self._update_p()
