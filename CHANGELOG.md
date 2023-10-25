@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 ---
 
+## 0.2.1 - 2023-10
+### Fixed
+  - Improve CorrNMF model formulation (added signature biases)
+  - Improve multimodal exposure plot
+
 ## 0.2.0 - 2023-10
 ### Added
   - Support fixing arbitrary many a priori known signatures during inference.
