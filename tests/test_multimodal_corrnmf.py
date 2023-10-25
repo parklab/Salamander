@@ -38,6 +38,13 @@ def alphas_init():
 
 
 @pytest.fixture
+def betas_init():
+    return [
+        np.load(f"{PATH_TEST_DATA}/model{n}_beta_init.npy") for n in range(N_MODALITIES)
+    ]
+
+
+@pytest.fixture
 def _ps():
     return [np.load(f"{PATH_TEST_DATA}/model{n}_p.npy") for n in range(N_MODALITIES)]
 
@@ -71,7 +78,9 @@ def sigma_sq_init():
 
 
 @pytest.fixture
-def multi_model_init(counts, Ws_init, alphas_init, Ls_init, U_init, sigma_sq_init):
+def multi_model_init(
+    counts, Ws_init, alphas_init, betas_init, Ls_init, U_init, sigma_sq_init
+):
     models = []
 
     for n, n_signatures in enumerate(NS_SIGNATURES):
@@ -81,6 +90,7 @@ def multi_model_init(counts, Ws_init, alphas_init, Ls_init, U_init, sigma_sq_ini
         model.X = counts[n].values
         model.W = Ws_init[n]
         model.alpha = alphas_init[n]
+        model.beta = betas_init[n]
         model.L = Ls_init[n]
         model.U = U_init
         model.sigma_sq = sigma_sq_init
@@ -136,6 +146,14 @@ def alphas_updated():
 
 
 @pytest.fixture
+def betas_updated():
+    return [
+        np.load(f"{PATH_TEST_DATA}/model{n}_beta_updated.npy")
+        for n in range(N_MODALITIES)
+    ]
+
+
+@pytest.fixture
 def Ls_updated():
     return [
         np.load(f"{PATH_TEST_DATA}/model{n}_L_updated.npy") for n in range(N_MODALITIES)
@@ -164,6 +182,12 @@ class TestUpdatesMultimodalCorrNMFDet:
 
         for model, alpha_updated in zip(multi_model_init.models, alphas_updated):
             assert np.allclose(model.alpha, alpha_updated)
+
+    def test_update_beta(self, multi_model_init, _ps, betas_updated):
+        multi_model_init._update_betas(_ps)
+
+        for model, beta_updated in zip(multi_model_init.models, betas_updated):
+            assert np.allclose(model.beta, beta_updated)
 
     def test_p(self, multi_model_init, _ps):
         ps_computed = multi_model_init._update_ps()

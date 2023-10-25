@@ -125,7 +125,6 @@ class MultimodalCorrNMF:
             * np.log(2 * np.pi * self.models[0].sigma_sq)
         )
         elbo -= np.sum(self.models[0].U ** 2) / (2 * self.models[0].sigma_sq)
-
         return elbo
 
     @property
@@ -150,7 +149,6 @@ class MultimodalCorrNMF:
             * np.log(2 * np.pi * self.models[0].sigma_sq)
         )
         sof_value -= np.sum(self.models[0].U ** 2) / (2 * self.models[0].sigma_sq)
-
         return sof_value
 
     def loglikelihood(self) -> float:
@@ -167,7 +165,9 @@ class MultimodalCorrNMF:
         n_parameters_embeddings = self.dim_embeddings * (
             np.sum(self.ns_signatures) + self.n_samples
         )
-        n_parameters_biases = self.n_modalities * self.n_samples
+        n_parameters_biases = self.n_modalities * self.n_samples + np.sum(
+            self.ns_signatures
+        )
         n_parameters_exposures = n_parameters_embeddings + n_parameters_biases
         n_parameters = n_parameters_signatures + n_parameters_exposures + 1
 
@@ -180,6 +180,10 @@ class MultimodalCorrNMF:
     def _update_alphas(self):
         for model in self.models:
             model._update_alpha()
+
+    def _update_betas(self, ps):
+        for model, p in zip(self.models, ps):
+            model._update_beta(p)
 
     def _update_sigma_sq(self):
         Ls = np.concatenate([model.L for model in self.models], axis=1)
@@ -206,6 +210,7 @@ class MultimodalCorrNMF:
                     u,
                     model.L,
                     model.alpha[index],
+                    model.beta,
                     sigma_sq,
                     aux_col,
                     add_penalty=False,
@@ -214,7 +219,6 @@ class MultimodalCorrNMF:
             ]
         )
         s -= np.dot(u, u) / (2 * sigma_sq)
-
         return -s
 
     def _gradient_u(self, u, index, s_grads):
@@ -225,6 +229,7 @@ class MultimodalCorrNMF:
                     u,
                     model.L,
                     model.alpha[index],
+                    model.beta,
                     sigma_sq,
                     s_grad,
                     add_penalty=False,
@@ -234,7 +239,6 @@ class MultimodalCorrNMF:
             axis=0,
         )
         s -= u / sigma_sq
-
         return -s
 
     def _hessian_u(self, u, index, outer_prods_Ls):
@@ -245,6 +249,7 @@ class MultimodalCorrNMF:
                     u,
                     model.L,
                     model.alpha[index],
+                    model.beta,
                     sigma_sq,
                     outer_prods_L,
                     add_penalty=False,
@@ -254,7 +259,6 @@ class MultimodalCorrNMF:
             axis=0,
         )
         s -= np.diag(np.full(self.dim_embeddings, 1 / sigma_sq))
-
         return -s
 
     def _update_u(self, index, aux_cols, outer_prods_Ls):
@@ -405,6 +409,7 @@ class MultimodalCorrNMF:
 
             self._update_alphas()
             ps = self._update_ps()
+            self._update_betas(ps)
             self._update_LsU(ps, given_signature_embeddings, given_sample_embeddings)
             self._update_sigma_sq()
             self._update_Ws()
