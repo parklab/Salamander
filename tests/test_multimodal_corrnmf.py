@@ -170,7 +170,7 @@ def sigma_sq_updated():
     return np.load(f"{PATH_TEST_DATA}/sigma_sq_updated.npy")
 
 
-class TestUpdatesMultimodalCorrNMFDet:
+class TestUpdatesMultimodalCorrNMF:
     def test_update_W(self, multi_model_init, Ws_updated):
         multi_model_init._update_Ws()
 
@@ -178,13 +178,17 @@ class TestUpdatesMultimodalCorrNMFDet:
             assert np.allclose(model.W, W_updated)
 
     def test_update_alpha(self, multi_model_init, alphas_updated):
-        multi_model_init._update_alphas()
+        n_modalities = multi_model_init.n_modalities
+        given_sample_biases = [None for _ in range(n_modalities)]
+        multi_model_init._update_alphas(given_sample_biases)
 
         for model, alpha_updated in zip(multi_model_init.models, alphas_updated):
             assert np.allclose(model.alpha, alpha_updated)
 
     def test_update_beta(self, multi_model_init, _ps, betas_updated):
-        multi_model_init._update_betas(_ps)
+        n_modalities = multi_model_init.n_modalities
+        given_signature_biases = [None for _ in range(n_modalities)]
+        multi_model_init._update_betas(_ps, given_signature_biases)
 
         for model, beta_updated in zip(multi_model_init.models, betas_updated):
             assert np.allclose(model.beta, beta_updated)
@@ -215,21 +219,30 @@ class TestUpdatesMultimodalCorrNMFDet:
         for model in multi_model_init.models:
             assert np.allclose(model.sigma_sq, sigma_sq_updated)
 
-    @pytest.mark.parametrize("ns_signatures", [[1, 2], [2, 2]])
-    def test_given_signatures(self, ns_signatures, counts):
-        for n_given_signatures in range(1, ns_signatures[0] + 1):
+
+@pytest.mark.parametrize(
+    "ns_signatures,dim_embeddings", [([1, 2], 1), ([2, 2], 1), ([2, 2], 2)]
+)
+class TestGivenParametersMultimodalCorrNMF:
+    @pytest.fixture()
+    def multi_model(self, ns_signatures, dim_embeddings):
+        model = multimodal_corrnmf.MultimodalCorrNMF(
+            n_modalities=2,
+            ns_signatures=ns_signatures,
+            dim_embeddings=dim_embeddings,
+            min_iterations=3,
+            max_iterations=3,
+        )
+        return model
+
+    def test_given_signatures(self, multi_model, counts):
+        n_signatures0 = multi_model.ns_signatures[0]
+        for n_given_signatures in range(1, n_signatures0 + 1):
             given_signatures0 = (
                 counts[0].iloc[:, :n_given_signatures].astype(float).copy()
             )
             given_signatures0 /= given_signatures0.sum(axis=0)
             given_signatures = [given_signatures0, None]
-            multi_model = multimodal_corrnmf.MultimodalCorrNMF(
-                n_modalities=2,
-                ns_signatures=ns_signatures,
-                dim_embeddings=2,
-                min_iterations=3,
-                max_iterations=3,
-            )
             multi_model.fit(counts, given_signatures=given_signatures)
             assert np.allclose(
                 given_signatures0,
@@ -240,37 +253,36 @@ class TestUpdatesMultimodalCorrNMFDet:
                 multi_model.models[1].signatures.iloc[:, :n_given_signatures],
             )
 
-    @pytest.mark.parametrize(
-        "ns_signatures,dim_embeddings", [([1, 2], 1), ([2, 2], 1), ([2, 2], 2)]
-    )
-    def test_given_signature_embeddings(self, ns_signatures, dim_embeddings, counts):
+    def test_given_signature_biases(self, multi_model, counts):
+        n_signatures0 = multi_model.ns_signatures[0]
+        given_signature_biases0 = np.random.uniform(size=n_signatures0)
+        given_signature_biases = [given_signature_biases0, None]
+        multi_model.fit(counts, given_signature_biases=given_signature_biases)
+        assert np.allclose(given_signature_biases0, multi_model.models[0].beta)
+        assert not np.allclose(given_signature_biases0, multi_model.models[1].beta)
+
+    def test_given_signature_embeddings(self, multi_model, counts):
+        n_signatures0 = multi_model.ns_signatures[0]
         given_signature_embeddings0 = np.random.uniform(
-            size=(dim_embeddings, ns_signatures[0])
+            size=(multi_model.dim_embeddings, n_signatures0)
         )
         given_signature_embeddings = [given_signature_embeddings0, None]
-        multi_model = multimodal_corrnmf.MultimodalCorrNMF(
-            n_modalities=2,
-            ns_signatures=ns_signatures,
-            dim_embeddings=dim_embeddings,
-            min_iterations=3,
-            max_iterations=3,
-        )
         multi_model.fit(counts, given_signature_embeddings=given_signature_embeddings)
         assert np.allclose(given_signature_embeddings0, multi_model.models[0].L)
         assert not np.allclose(given_signature_embeddings0, multi_model.models[1].L)
 
-    @pytest.mark.parametrize(
-        "ns_signatures,dim_embeddings", [([1, 2], 1), ([2, 2], 1), ([2, 2], 2)]
-    )
-    def test_given_sample_embeddings(self, ns_signatures, dim_embeddings, counts):
+    def test_given_sample_biases(self, multi_model, counts):
         n_samples = len(counts[0].columns)
-        given_sample_embeddings = np.random.uniform(size=(dim_embeddings, n_samples))
-        multi_model = multimodal_corrnmf.MultimodalCorrNMF(
-            n_modalities=2,
-            ns_signatures=ns_signatures,
-            dim_embeddings=dim_embeddings,
-            min_iterations=3,
-            max_iterations=3,
+        given_sample_biases0 = np.random.uniform(size=n_samples)
+        given_sample_biases = [given_sample_biases0, None]
+        multi_model.fit(counts, given_sample_biases=given_sample_biases)
+        assert np.allclose(given_sample_biases0, multi_model.models[0].alpha)
+        assert not np.allclose(given_sample_biases0, multi_model.models[1].alpha)
+
+    def test_given_sample_embeddings(self, multi_model, counts):
+        n_samples = len(counts[0].columns)
+        given_sample_embeddings = np.random.uniform(
+            size=(multi_model.dim_embeddings, n_samples)
         )
         multi_model.fit(counts, given_sample_embeddings=given_sample_embeddings)
 

@@ -168,47 +168,49 @@ class TestUpdatesCorrNMFDet:
         model_init._update_sigma_sq()
         assert np.allclose(model_init.sigma_sq, sigma_sq_updated)
 
-    def test_given_signatures(self, n_signatures, counts):
-        for n_given_signatures in range(1, n_signatures + 1):
+
+@pytest.mark.parametrize("n_signatures,dim_embeddings", [(1, 1), (2, 1), (2, 2)])
+class TestGivenParametersCorrNMFDet:
+    @pytest.fixture
+    def model(self, n_signatures, dim_embeddings):
+        return corrnmf_det.CorrNMFDet(
+            n_signatures=n_signatures,
+            dim_embeddings=dim_embeddings,
+            min_iterations=3,
+            max_iterations=3,
+        )
+
+    def test_given_signatures(self, model, counts):
+        for n_given_signatures in range(1, model.n_signatures + 1):
             given_signatures = counts.iloc[:, :n_given_signatures].astype(float).copy()
             given_signatures /= given_signatures.sum(axis=0)
-            model = corrnmf_det.CorrNMFDet(
-                n_signatures=n_signatures,
-                dim_embeddings=n_signatures,
-                min_iterations=3,
-                max_iterations=3,
-            )
             model.fit(counts, given_signatures=given_signatures)
             assert np.allclose(
                 given_signatures, model.signatures.iloc[:, :n_given_signatures]
             )
 
-    def test_given_signature_embeddings(self, n_signatures, counts):
-        for dim_embeddings in range(1, n_signatures + 1):
-            given_signature_embeddings = np.random.uniform(
-                size=(dim_embeddings, n_signatures)
-            )
-            model = corrnmf_det.CorrNMFDet(
-                n_signatures=n_signatures,
-                dim_embeddings=dim_embeddings,
-                min_iterations=3,
-                max_iterations=3,
-            )
-            model.fit(counts, given_signature_embeddings=given_signature_embeddings)
-            assert np.allclose(given_signature_embeddings, model.L)
+    def test_given_signature_biases(self, model, counts):
+        given_signature_biases = np.random.uniform(size=model.n_signatures)
+        model.fit(counts, given_signature_biases=given_signature_biases)
+        assert np.allclose(given_signature_biases, model.beta)
 
-    def test_given_sample_embeddings(self, n_signatures, counts):
+    def test_given_signature_embeddings(self, model, counts):
+        given_signature_embeddings = np.random.uniform(
+            size=(model.dim_embeddings, model.n_signatures)
+        )
+        model.fit(counts, given_signature_embeddings=given_signature_embeddings)
+        assert np.allclose(given_signature_embeddings, model.L)
+
+    def test_given_sample_biases(self, model, counts):
+        n_samples = counts.shape[1]
+        given_sample_biases = np.random.uniform(size=n_samples)
+        model.fit(counts, given_sample_biases=given_sample_biases)
+        assert np.allclose(given_sample_biases, model.alpha)
+
+    def test_given_sample_embeddings(self, model, counts):
         n_samples = len(counts.columns)
-
-        for dim_embeddings in range(1, n_signatures + 1):
-            given_sample_embeddings = np.random.uniform(
-                size=(dim_embeddings, n_samples)
-            )
-            model = corrnmf_det.CorrNMFDet(
-                n_signatures=n_signatures,
-                dim_embeddings=dim_embeddings,
-                min_iterations=3,
-                max_iterations=3,
-            )
-            model.fit(counts, given_sample_embeddings=given_sample_embeddings)
-            assert np.allclose(given_sample_embeddings, model.U)
+        given_sample_embeddings = np.random.uniform(
+            size=(model.dim_embeddings, n_samples)
+        )
+        model.fit(counts, given_sample_embeddings=given_sample_embeddings)
+        assert np.allclose(given_sample_embeddings, model.U)
