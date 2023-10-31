@@ -6,7 +6,7 @@ EPSILON = np.finfo(np.float32).eps
 
 
 @njit(fastmath=True)
-def kl_divergence(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
+def kl_divergence(X: np.ndarray, W: np.ndarray, H: np.ndarray, weights=None) -> float:
     r"""
     The generalized Kullback-Leibler divergence
     D_KL(X || WH) = \sum_vd X_vd * ln(X_vd / (WH)_vd) - \sum_vd X_vd + \sum_vd (WH)_vd.
@@ -22,6 +22,9 @@ def kl_divergence(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
     H : np.ndarray of shape (n_signatures, n_samples)
         exposure matrix
 
+    weights : np.ndarray of shape (n_samples,)
+        per sample weights
+
     Returns
     -------
     result : float
@@ -30,19 +33,28 @@ def kl_divergence(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
     WH = W @ H
     result = 0.0
 
-    for v in range(V):
-        for d in range(D):
+    for d in range(D):
+        summand_sample = 0.0
+
+        for v in range(V):
             if X[v, d] != 0:
-                result += X[v, d] * np.log(X[v, d] / WH[v, d])
-                result -= X[v, d]
-            result += WH[v, d]
+                summand_sample += X[v, d] * np.log(X[v, d] / WH[v, d])
+                summand_sample -= X[v, d]
+            summand_sample += WH[v, d]
+
+        if weights is not None:
+            summand_sample *= weights[d]
+
+        result += summand_sample
 
     return result
 
 
-def samplewise_kl_divergence(X, W, H):
+def samplewise_kl_divergence(
+    X: np.ndarray, W: np.ndarray, H: np.ndarray, weights=None
+) -> np.ndarray:
     """
-    Per sample generalized Kullback-Leibler divergence D_KL(x || Wh).
+    Per sample (weighted) generalized Kullback-Leibler divergence D_KL(x || Wh).
 
     Parameters
     ----------
@@ -54,6 +66,9 @@ def samplewise_kl_divergence(X, W, H):
 
     H : np.ndarray of shape (n_signatures, n_samples)
         exposure matrix
+
+    weights : np.ndarray of shape (n_samples,)
+        per sample weights
 
     Returns
     -------
@@ -70,6 +85,9 @@ def samplewise_kl_divergence(X, W, H):
     s3 = np.dot(H.T, np.sum(W, axis=0))
 
     errors = s1 + s2 + s3
+
+    if weights is not None:
+        errors *= weights
 
     return errors
 
@@ -140,7 +158,11 @@ def poisson_llh(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
 
 @njit
 def update_W(
-    X: np.ndarray, W: np.ndarray, H: np.ndarray, n_given_signatures: int = 0
+    X: np.ndarray,
+    W: np.ndarray,
+    H: np.ndarray,
+    weights_kl=None,
+    n_given_signatures: int = 0,
 ) -> np.ndarray:
     """
     The multiplicative update rule of the signature matrix W
@@ -161,15 +183,28 @@ def update_W(
     H : np.ndarray of shape (n_signatures, n_samples)
         exposure matrix
 
+    weights_kl : np.ndarray of shape (n_samples,)
+        per sample weights in the KL-divergence loss
+
     n_given_signatures : int
-        The number of known signatures, which will not be updated.
+        The number of known signatures which will not be updated.
 
     Returns
     -------
     W : np.ndarray of shape (n_features, n_signatures)
         updated signature matrix
     """
-    W_updated = W * ((X / (W @ H)) @ H.T)
+    n_signatures = W.shape[1]
+
+    if n_given_signatures == n_signatures:
+        return W
+
+    aux = X / (W @ H)
+
+    if weights_kl is not None:
+        aux *= weights_kl
+
+    W_updated = W * (aux @ H.T)
     W_updated /= W_updated.sum(axis=0)
     W_updated[:, :n_given_signatures] = W[:, :n_given_signatures].copy()
     W_updated[:, n_given_signatures:] = W_updated[:, n_given_signatures:].clip(EPSILON)
@@ -178,7 +213,9 @@ def update_W(
 
 
 @njit
-def update_H(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> np.ndarray:
+def update_H(
+    X: np.ndarray, W: np.ndarray, H: np.ndarray, weights_kl=None, weights_l_half=None
+) -> np.ndarray:
     """
     The multiplicative update rule of the exposure matrix H
     under the constraint of normalized signatures.
@@ -196,26 +233,50 @@ def update_H(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> np.ndarray:
     H : np.ndarray of shape (n_signatures, n_samples)
         exposure matrix
 
+    weights_kl : np.ndarray of shape (n_samples,)
+        per sample weights in the KL-divergence loss
+
+    weights_l_half : np.ndarray of shape (n_samples,)
+        per sample l_half penalty weights. They can be used to induce
+        sparse exposures.
+
     Returns
     -------
-    H : np.ndarray of shape (n_signatures, n_samples)
-        updated exposure matrix
-
-    Reference
-    ---------
-    D. Lee, H. Seung: Algorithms for Non-negative Matrix Factorization
-    - Advances in neural information processing systems, 2000
-    https://proceedings.neurips.cc/paper_files/paper/2000/file/f9d1152547c0bde01830b7e8bd60024c-Paper.pdf
+    H_updated : np.ndarray of shape (n_signatures, n_samples)
+        The updated exposure matrix. If possible, the update is performed
+        in-place.
     """
-    H *= W.T @ (X / (W @ H))
-    H = H.clip(EPSILON)
+    aux = X / (W @ H)
 
-    return H
+    if weights_l_half is None:
+        # in-place
+        H *= W.T @ aux
+        H = H.clip(EPSILON)
+        return H
+
+    intermediate = 4.0 * H * (W.T @ aux)
+
+    if weights_kl is not None:
+        intermediate *= weights_kl**2
+
+    discriminant = 0.25 * weights_l_half**2 + intermediate
+    H_updated = 0.25 * (weights_l_half / 2 - np.sqrt(discriminant)) ** 2
+
+    if weights_kl is not None:
+        H_updated /= weights_kl**2
+
+    H_updated = H_updated.clip(EPSILON)
+    return H_updated
 
 
 @njit
 def update_WH(
-    X: np.ndarray, W: np.ndarray, H: np.ndarray, n_given_signatures: int = 0
+    X: np.ndarray,
+    W: np.ndarray,
+    H: np.ndarray,
+    weights_kl=None,
+    weights_l_half=None,
+    n_given_signatures: int = 0,
 ) -> np.ndarray:
     """
     A joint update rule for the signature matrix W and
@@ -235,30 +296,57 @@ def update_WH(
     H : np.ndarray of shape (n_signatures, n_samples)
         exposure matrix
 
+    weights_kl : np.ndarray of shape (n_samples,)
+        per sample weights in the KL-divergence loss
+
+    weights_l_half : np.ndarray of shape (n_samples,)
+        per sample l_half penalty weights. They can be used to induce
+        sparse exposures.
+
     n_given_signatures : int
-        The number of known signatures, which will not be updated.
+        The number of known signatures which will not be updated.
 
     Returns
     -------
-    W : np.ndarray of shape (n_features, n_signatures)
+    W_updated : np.ndarray of shape (n_features, n_signatures)
         updated signature matrix
 
-    H : np.ndarray of shape (n_signatures, n_samples)
-        updated exposure matrix
+    H_updated : np.ndarray of shape (n_signatures, n_samples)
+        The updated exposure matrix. If possible, the update is performed
+        in-place.
     """
     n_signatures = W.shape[1]
     aux = X / (W @ H)
 
-    if n_given_signatures < n_signatures:
+    if n_given_signatures == n_signatures:
+        W_updated = W
+    else:
+        if weights_kl is None:
+            scaled_aux = aux
+        else:
+            scaled_aux = weights_kl * aux
         # the old signatures are needed for updating H
-        W_updated = W * (aux @ H.T)
+        W_updated = W * (scaled_aux @ H.T)
         W_updated /= np.sum(W_updated, axis=0)
         W_updated[:, :n_given_signatures] = W[:, :n_given_signatures].copy()
         W_updated = W_updated.clip(EPSILON)
-    else:
-        W_updated = W
 
-    H *= W.T @ aux
-    H = H.clip(EPSILON)
+    if weights_l_half is None:
+        # in-place
+        H *= W.T @ aux
+        H = H.clip(EPSILON)
+        return W_updated, H
 
-    return W_updated, H
+    intermediate = 4.0 * H * (W.T @ aux)
+
+    if weights_kl is not None:
+        intermediate *= weights_kl**2
+
+    discriminant = 0.25 * weights_l_half**2 + intermediate
+    H_updated = 0.25 * (weights_l_half / 2 - np.sqrt(discriminant)) ** 2
+
+    if weights_kl is not None:
+        H_updated /= weights_kl**2
+
+    H_updated = H_updated.clip(EPSILON)
+    return W_updated, H_updated

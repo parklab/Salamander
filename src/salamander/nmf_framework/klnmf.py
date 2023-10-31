@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from ..utils import value_checker
+from ..utils import shape_checker, type_checker, value_checker
 from . import _utils_klnmf
 from .nmf import NMF
 
@@ -59,17 +59,34 @@ class KLNMF(NMF):
         super().__init__(n_signatures, init_method, min_iterations, max_iterations, tol)
         value_checker("update method", update_method, ["mu-standard", "mu-joint"])
         self.update_method = update_method
+        self.weights_kl = None
+        self.weights_l_half = None
 
     @property
     def reconstruction_error(self) -> float:
+        """
+        The unweighted Kullback-Leibler divergence.
+        """
         return _utils_klnmf.kl_divergence(self.X, self.W, self.H)
 
     @property
     def samplewise_reconstruction_error(self) -> np.ndarray:
+        """
+        The unweighted samplewise Kullback-Leibler divergence.
+        """
         return _utils_klnmf.samplewise_kl_divergence(self.X, self.W, self.H)
 
     def objective_function(self) -> float:
-        return self.reconstruction_error
+        """
+        The sum of the (weighted) Kullback-Leibler divergence and the sparsity
+        penalty.
+        """
+        of_value = _utils_klnmf.kl_divergence(self.X, self.W, self.H, self.weights_kl)
+
+        if self.weights_l_half is not None:
+            of_value += np.dot(self.weights_l_half, np.sum(np.sqrt(self.H), axis=0))
+
+        return of_value
 
     @property
     def objective(self) -> str:
@@ -79,10 +96,14 @@ class KLNMF(NMF):
         return _utils_klnmf.poisson_llh(self.X, self.W, self.H)
 
     def _update_W(self):
-        self.W = _utils_klnmf.update_W(self.X, self.W, self.H, self.n_given_signatures)
+        self.W = _utils_klnmf.update_W(
+            self.X, self.W, self.H, self.weights_kl, self.n_given_signatures
+        )
 
     def _update_H(self):
-        self.H = _utils_klnmf.update_H(self.X, self.W, self.H)
+        self.H = _utils_klnmf.update_H(
+            self.X, self.W, self.H, self.weights_kl, self.weights_l_half
+        )
 
     def _update_WH(self):
         if self.update_method == "mu-standard":
@@ -91,13 +112,57 @@ class KLNMF(NMF):
                 self._update_W()
         else:
             self.W, self.H = _utils_klnmf.update_WH(
-                self.X, self.W, self.H, self.n_given_signatures
+                self.X,
+                self.W,
+                self.H,
+                self.weights_kl,
+                self.weights_l_half,
+                self.n_given_signatures,
             )
+
+    def _check_weights(self, weights: np.ndarray, name: str = "weights"):
+        """
+        Check if the given sample-specific loss function or l-1/2 penalty weights
+        are compatible with the input data.
+
+        weights : np.ndarray of shape (n_samples,)
+            Sample-specific KL-divergence or sparsity penalty loss weights
+
+        name : str, default='weights'
+            Name to be displayed in a potential error message
+        """
+        type_checker(name, weights, np.ndarray)
+        shape_checker(name, weights, (self.n_samples,))
+
+        if not all(weights >= 0):
+            raise ValueError(
+                "Only non-negative KL-divergence and sparsity penalty weights "
+                "are allowed."
+            )
+
+    def _setup_weight_parameters(
+        self, weights_kl: np.ndarray, weights_l_half: np.ndarray
+    ):
+        for weights, name in zip(
+            [weights_kl, weights_l_half], ["weights_kl", "weights_l_half"]
+        ):
+            if type(weights) in [float, int]:
+                weights *= np.ones(self.n_samples)
+
+            if type(weights) is list:
+                weights = np.array(weights)
+
+            if weights is not None:
+                self._check_weights(weights, name)
+
+            setattr(self, name, weights)
 
     def fit(
         self,
         data: pd.DataFrame,
         given_signatures=None,
+        weights_kl=None,
+        weights_l_half=None,
         init_kwargs=None,
         history=False,
         verbose=0,
@@ -117,6 +182,13 @@ class KLNMF(NMF):
             The number of known signatures can be less or equal to the
             number of signatures specified in the algorithm instance.
 
+        weights_kl : np.ndarray, default=None
+            Per sample KL-divergence loss weights of shape (n_samples,).
+
+        weights_l_half : np.ndarray, default=None
+            Per sample l_half penalty weights of shape (n_samples,).
+            They can be used to induce sparse exposures.
+
         init_kwargs : dict, default=None
             Any further keyword arguments to be passed to the initialization method.
             This includes, for example, a possible 'seed' keyword argument
@@ -135,6 +207,7 @@ class KLNMF(NMF):
             Returns the instance itself.
         """
         self._setup_data_parameters(data)
+        self._setup_weight_parameters(weights_kl, weights_l_half)
         self._initialize(given_signatures, init_kwargs)
         of_values = [self.objective_function()]
         n_iteration = 0

@@ -64,7 +64,10 @@ class CorrNMFDet(CorrNMF):
 
     def _update_W(self):
         self.W = update_W(
-            self.X, self.W, self.exposures.values, self.n_given_signatures
+            self.X,
+            self.W,
+            self.exposures.values,
+            n_given_signatures=self.n_given_signatures,
         )
 
     def _update_p(self):
