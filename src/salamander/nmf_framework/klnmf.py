@@ -216,7 +216,7 @@ class KLNMF(NMF):
         while not converged:
             n_iteration += 1
 
-            if verbose and n_iteration % 100 == 0:
+            if verbose and n_iteration % 1000 == 0:
                 print(f"iteration: {n_iteration}; objective: {of_values[-1]:.2f}")
 
             self._update_WH()
