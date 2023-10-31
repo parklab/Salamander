@@ -7,13 +7,7 @@ from scipy.special import gammaln
 
 from ..utils import match_signatures_pair, shape_checker, type_checker
 from ._utils_klnmf import kl_divergence, poisson_llh, samplewise_kl_divergence
-from .initialization import (
-    init_custom,
-    init_flat,
-    init_nndsvd,
-    init_random,
-    init_separableNMF,
-)
+from .initialization import initialize
 from .signature_nmf import SignatureNMF
 
 EPSILON = np.finfo(np.float32).eps
@@ -338,27 +332,56 @@ class CorrNMF(SignatureNMF):
             shape: (n_signatures, dim_embeddings, dim_embeddings)
         """
 
-    def _check_given_signature_embeddings(self, given_signature_embeddings: np.ndarray):
-        type_checker("signature embeddings", given_signature_embeddings, np.ndarray)
+    def _check_given_biases(self, given_biases, expected_n_biases, name):
+        type_checker(name, given_biases, np.ndarray)
+        shape_checker(name, given_biases, (expected_n_biases,))
+
+    def _check_given_embeddings(self, given_embeddings, expected_n_embeddings, name):
+        type_checker(name, given_embeddings, np.ndarray)
         shape_checker(
-            "given_signature_embeddings",
-            given_signature_embeddings,
-            (self.dim_embeddings, self.n_signatures),
+            name, given_embeddings, (self.dim_embeddings, expected_n_embeddings)
         )
 
-    def _check_given_sample_embeddings(self, given_sample_embeddings: np.ndarray):
-        type_checker("sample embeddings", given_sample_embeddings, np.ndarray)
-        shape_checker(
-            "given_sample_embeddings",
-            given_sample_embeddings,
-            (self.dim_embeddings, self.n_samples),
-        )
+    def _check_given_parameters(
+        self,
+        given_signatures,
+        given_signature_biases,
+        given_signature_embeddings,
+        given_sample_biases,
+        given_sample_embeddings,
+    ):
+        if given_signatures is not None:
+            self._check_given_signatures(given_signatures)
+
+        if given_signature_biases is not None:
+            self._check_given_biases(
+                given_signature_biases, self.n_signatures, "given_signature_biases"
+            )
+
+        if given_signature_embeddings is not None:
+            self._check_given_embeddings(
+                given_signature_embeddings,
+                self.n_signatures,
+                "given_signature_embeddings",
+            )
+
+        if given_sample_biases is not None:
+            self._check_given_biases(
+                given_sample_biases, self.n_samples, "given_sample_biases"
+            )
+
+        if given_sample_embeddings is not None:
+            self._check_given_embeddings(
+                given_sample_embeddings, self.n_samples, "given_sample_embeddings"
+            )
 
     def _initialize(
         self,
         given_signatures=None,
+        given_signature_biases=None,
         given_signature_embeddings=None,
-        given_sample_embeddings=True,
+        given_sample_biases=None,
+        given_sample_embeddings=None,
         init_kwargs=None,
     ):
         """
@@ -374,8 +397,16 @@ class CorrNMF(SignatureNMF):
             algorithm instance, and the mutation type names have to match
             the mutation types of the count data.
 
+        given_signature_biases : np.ndarray, default=None
+            Known signature biases of shape (n_signatures,) that will be fixed
+            during model fitting.
+
         given_signature_embeddings : np.ndarray, default=None
             A priori known signature embeddings of shape (dim_embeddings, n_signatures).
+
+        given_sample_biases : np.ndarray, default=None
+            Known sample biases of shape (n_samples,) that will be fixed
+            during model fitting.
 
         given_sample_embeddings : np.ndarray, default=None
             A priori known sample embeddings of shape (dim_embeddings, n_samples).
@@ -385,73 +416,51 @@ class CorrNMF(SignatureNMF):
             This includes, for example, a possible 'seed' keyword argument
             for all stochastic methods.
         """
+        self._check_given_parameters(
+            given_signatures,
+            given_signature_biases,
+            given_signature_embeddings,
+            given_sample_biases,
+            given_sample_embeddings,
+        )
+
         if given_signatures is not None:
-            self._check_given_signatures(given_signatures)
             self.n_given_signatures = len(given_signatures.columns)
         else:
             self.n_given_signatures = 0
 
-        if given_signature_embeddings is not None:
-            self._check_given_signature_embeddings(given_signature_embeddings)
-
-        if given_sample_embeddings is not None:
-            self._check_given_sample_embeddings(given_sample_embeddings)
-
         init_kwargs = {} if init_kwargs is None else init_kwargs.copy()
-
-        if self.init_method == "custom":
-            self.W, _ = init_custom(self.X, self.n_signatures, **init_kwargs)
-
-        elif self.init_method == "flat":
-            self.W, _ = init_flat(self.X, self.n_signatures)
-
-        elif self.init_method in ["nndsvd", "nndsvda", "nndsvdar"]:
-            self.W, _ = init_nndsvd(
-                self.X, self.n_signatures, init=self.init_method, **init_kwargs
-            )
-
-        elif self.init_method == "random":
-            self.W, _ = init_random(self.X, self.n_signatures, **init_kwargs)
-
-        else:
-            self.W = init_separableNMF(self.X, self.n_signatures)
-
-        if given_signatures is not None:
-            self.W[:, : self.n_given_signatures] = given_signatures.copy().values
-            given_signatures_names = given_signatures.columns.to_numpy(dtype="<U20")
-            n_new_signatures = self.n_signatures - self.n_given_signatures
-            new_signatures_names = np.array(
-                [f"Sig{k+1}" for k in range(n_new_signatures)]
-            )
-            self.signature_names = np.concatenate(
-                [given_signatures_names, new_signatures_names]
-            )
-
-        else:
-            self.signature_names = np.array(
-                [f"Sig{k+1}" for k in range(self.n_signatures)], dtype="<U20"
-            )
-
-        self.W /= np.sum(self.W, axis=0)
-        self.W = self.W.clip(EPSILON)
-        self.alpha = np.zeros(self.n_samples)
-        self.beta = np.zeros(self.n_signatures)
+        self.W, _, self.signature_names = initialize(
+            self.X, self.n_signatures, self.init_method, given_signatures, **init_kwargs
+        )
         self.sigma_sq = 1.0
-        self.L = np.random.multivariate_normal(
-            np.zeros(self.dim_embeddings),
-            np.identity(self.dim_embeddings),
-            size=self.n_signatures,
-        ).T
-        self.U = np.random.multivariate_normal(
-            np.zeros(self.dim_embeddings),
-            np.identity(self.dim_embeddings),
-            size=self.n_samples,
-        ).T
 
-        if given_signature_embeddings is not None:
+        if given_signature_biases is None:
+            self.beta = np.zeros(self.n_signatures)
+        else:
+            self.beta = given_signature_biases
+
+        if given_signature_embeddings is None:
+            self.L = np.random.multivariate_normal(
+                np.zeros(self.dim_embeddings),
+                np.identity(self.dim_embeddings),
+                size=self.n_signatures,
+            ).T
+        else:
             self.L = given_signature_embeddings
 
-        if given_sample_embeddings is not None:
+        if given_sample_biases is None:
+            self.alpha = np.zeros(self.n_samples)
+        else:
+            self.alpha = given_sample_biases
+
+        if given_sample_embeddings is None:
+            self.U = np.random.multivariate_normal(
+                np.zeros(self.dim_embeddings),
+                np.identity(self.dim_embeddings),
+                size=self.n_samples,
+            ).T
+        else:
             self.U = given_sample_embeddings
 
     @property

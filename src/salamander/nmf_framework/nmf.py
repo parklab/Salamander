@@ -3,14 +3,8 @@ from abc import abstractmethod
 import numpy as np
 import pandas as pd
 
-from ..utils import match_signatures_pair, normalize_WH
-from .initialization import (
-    init_custom,
-    init_flat,
-    init_nndsvd,
-    init_random,
-    init_separableNMF,
-)
+from ..utils import match_signatures_pair
+from .initialization import initialize
 from .signature_nmf import SignatureNMF
 
 EPSILON = np.finfo(np.float32).eps
@@ -177,6 +171,11 @@ class NMF(SignatureNMF):
 
         Input:
         ------
+        given_signatures : pd.Dataframe, default=None
+            At most 'n_signatures' many signatures can be provided to
+            overwrite some of the initialized signatures. This does not
+            change the initialized exposurse.
+
         init_kwargs: dict
             Any further keywords arguments to be passed to the initialization method.
             This includes, for example, a possible 'seed' keyword argument
@@ -189,45 +188,9 @@ class NMF(SignatureNMF):
             self.n_given_signatures = 0
 
         init_kwargs = {} if init_kwargs is None else init_kwargs.copy()
-
-        if self.init_method == "custom":
-            self.W, self.H = init_custom(self.X, self.n_signatures, **init_kwargs)
-
-        elif self.init_method == "flat":
-            self.W, self.H = init_flat(self.X, self.n_signatures)
-
-        elif self.init_method in ["nndsvd", "nndsvda", "nndsvdar"]:
-            self.W, self.H = init_nndsvd(
-                self.X, self.n_signatures, init=self.init_method, **init_kwargs
-            )
-
-        elif self.init_method == "random":
-            self.W, self.H = init_random(self.X, self.n_signatures, **init_kwargs)
-
-        else:
-            self.W = init_separableNMF(self.X, self.n_signatures)
-
-        if given_signatures is not None:
-            self.W[:, : self.n_given_signatures] = given_signatures.copy().values
-            given_signatures_names = given_signatures.columns.to_numpy(dtype=str)
-            n_new_signatures = self.n_signatures - self.n_given_signatures
-            new_signatures_names = np.array(
-                [f"Sig{k+1}" for k in range(n_new_signatures)]
-            )
-            self.signature_names = np.concatenate(
-                [given_signatures_names, new_signatures_names]
-            )
-
-        else:
-            self.signature_names = np.array(
-                [f"Sig{k+1}" for k in range(self.n_signatures)]
-            )
-
-        if not hasattr(self, "H"):
-            _, self.H = init_random(self.X, self.n_signatures)
-
-        self.W, self.H = normalize_WH(self.W, self.H)
-        self.W, self.H = self.W.clip(EPSILON), self.H.clip(EPSILON)
+        self.W, self.H, self.signature_names = initialize(
+            self.X, self.n_signatures, self.init_method, given_signatures, **init_kwargs
+        )
 
     @property
     def corr_signatures(self) -> pd.DataFrame:

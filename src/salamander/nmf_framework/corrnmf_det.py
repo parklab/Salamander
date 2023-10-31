@@ -51,11 +51,15 @@ class CorrNMFDet(CorrNMF):
             for given signatures and mutation count data
     """
 
-    def _update_alpha(self):
-        self.alpha = _utils_corrnmf.update_alpha(self.X, self.beta, self.L, self.U)
+    def _update_alpha(self, given_sample_biases=None):
+        if given_sample_biases is None:
+            self.alpha = _utils_corrnmf.update_alpha(self.X, self.beta, self.L, self.U)
 
-    def _update_beta(self, p):
-        self.beta = _utils_corrnmf.update_beta(self.X, p, self.alpha, self.L, self.U)
+    def _update_beta(self, p, given_signature_biases=None):
+        if given_signature_biases is None:
+            self.beta = _utils_corrnmf.update_beta(
+                self.X, p, self.alpha, self.L, self.U
+            )
 
     def _update_sigma_sq(self):
         embeddings = np.concatenate([self.L, self.U], axis=1)
@@ -64,7 +68,10 @@ class CorrNMFDet(CorrNMF):
 
     def _update_W(self):
         self.W = update_W(
-            self.X, self.W, self.exposures.values, self.n_given_signatures
+            self.X,
+            self.W,
+            self.exposures.values,
+            n_given_signatures=self.n_given_signatures,
         )
 
     def _update_p(self):
@@ -167,7 +174,9 @@ class CorrNMFDet(CorrNMF):
         for d, aux_col in enumerate(aux.T):
             self._update_u(d, aux_col, outer_prods_L)
 
-    def _update_LU(self, p, given_signature_embeddings, given_sample_embeddings):
+    def _update_LU(
+        self, p, given_signature_embeddings=None, given_sample_embeddings=None
+    ):
         aux = np.einsum("vd,vkd->kd", self.X, p)
 
         if given_signature_embeddings is None:
@@ -180,7 +189,9 @@ class CorrNMFDet(CorrNMF):
         self,
         data: pd.DataFrame,
         given_signatures=None,
+        given_signature_biases=None,
         given_signature_embeddings=None,
+        given_sample_biases=None,
         given_sample_embeddings=None,
         init_kwargs=None,
         history=False,
@@ -195,13 +206,21 @@ class CorrNMFDet(CorrNMF):
             The mutation count data
 
         given_signatures: pd.DataFrame, default=None
-            Known signatures which will be fixed during model fitting.
+            Known signatures that will be fixed during model fitting.
+
+        given_signature_biases : np.ndarray, default=None
+            Known signature biases of shape (n_signatures,) that will be fixed
+            during model fitting.
 
         given_signature_embeddings: np.ndarray, default=None
-            Known signature embeddings which will be fixed during model fitting.
+            Known signature embeddings that will be fixed during model fitting.
+
+        given_sample_biases : np.ndarray, default=None
+            Known sample biases of shape (n_samples,) that will be fixed
+            during model fitting.
 
         given_sample_embeddings: np.ndarray, default=None
-            Known sample embeddings which will be fixed during model fitting.
+            Known sample embeddings that will be fixed during model fitting.
 
         init_kwargs: dict
             Any further keywords arguments to be passed to the initialization method.
@@ -223,7 +242,9 @@ class CorrNMFDet(CorrNMF):
         self._setup_data_parameters(data)
         self._initialize(
             given_signatures=given_signatures,
+            given_signature_biases=given_signature_biases,
             given_signature_embeddings=given_signature_embeddings,
+            given_sample_biases=given_sample_biases,
             given_sample_embeddings=given_sample_embeddings,
             init_kwargs=init_kwargs,
         )
@@ -237,9 +258,9 @@ class CorrNMFDet(CorrNMF):
             if verbose and n_iteration % 100 == 0:
                 print(f"iteration: {n_iteration}; objective: {of_values[-1]:.2f}")
 
-            self._update_alpha()
+            self._update_alpha(given_sample_biases)
             p = self._update_p()
-            self._update_beta(p)
+            self._update_beta(p, given_signature_biases)
             self._update_LU(p, given_signature_embeddings, given_sample_embeddings)
             self._update_sigma_sq()
 
