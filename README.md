@@ -67,4 +67,4 @@ MIT
 
 ## Changelog
 
-Consult the [CHANGELOG](https://github.com/BeGeiger/CorrNMF/blob/main/CHANGELOG.md) file for enhancements and fixes of each version.
+Consult the [CHANGELOG](https://github.com/parklab/Salamander/blob/main/CHANGELOG.md) file for enhancements and fixes of each version.
