@@ -21,7 +21,6 @@ from ..plot import (
     corr_plot,
     embeddings_plot,
     history_plot,
-    salamander_style,
     signatures_plot,
 )
 from ..utils import type_checker, value_checker
@@ -453,7 +452,6 @@ class MultimodalCorrNMF:
 
         return self
 
-    @salamander_style
     def plot_history(self, ax=None, outfile=None, **kwargs):
         if not self.history:
             raise ValueError(
@@ -469,7 +467,6 @@ class MultimodalCorrNMF:
 
         return ax
 
-    @salamander_style
     def plot_signatures(
         self,
         colors=None,
@@ -506,7 +503,6 @@ class MultimodalCorrNMF:
 
         return axes
 
-    @salamander_style
     def plot_exposures(
         self,
         sample_order=None,
@@ -590,7 +586,6 @@ class MultimodalCorrNMF:
     def corr_samples(self) -> pd.DataFrame:
         return self.models[0].corr_samples
 
-    @salamander_style
     def plot_correlation(self, data="signatures", annot=False, outfile=None, **kwargs):
         """
         Plot the correlation matrix of the signatures or samples.
@@ -725,7 +720,6 @@ class MultimodalCorrNMF:
 
         return results
 
-    @salamander_style
     def plot_feature_change(
         self,
         in_modality=None,

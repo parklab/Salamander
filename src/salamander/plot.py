@@ -1,5 +1,4 @@
 import warnings
-from functools import wraps
 
 import fastcluster
 import matplotlib as mpl
@@ -17,31 +16,24 @@ from .consts import COLORS_INDEL83, COLORS_SBS96, INDEL_TYPES_83, SBS_TYPES_96
 from .utils import match_to_catalog, value_checker
 
 
-def salamander_style(func):
-    @wraps(func)
-    def rc_wrapper(*args, **kwargs):
-        sns.set_context("notebook")
-        sns.set_style("ticks")
-
-        params = {
-            "axes.edgecolor": "black",
-            "axes.labelsize": 14,
-            "axes.spines.top": False,
-            "axes.spines.right": False,
-            "axes.titlesize": 16,
-            "errorbar.capsize": 3,
-            "font.family": "DejaVu Sans",
-            "legend.fontsize": 12,
-            "lines.markersize": 8,
-            "pdf.fonttype": 42,
-            "xtick.labelsize": 12,
-            "ytick.labelsize": 12,
-        }
-        mpl.rcParams.update(params)
-
-        return func(*args, **kwargs)
-
-    return rc_wrapper
+def set_salamander_style():
+    sns.set_context("notebook")
+    sns.set_style("ticks")
+    params = {
+        "axes.edgecolor": "black",
+        "axes.labelsize": 14,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.titlesize": 16,
+        "errorbar.capsize": 3,
+        "font.family": "DejaVu Sans",
+        "legend.fontsize": 12,
+        "lines.markersize": 8,
+        "pdf.fonttype": 42,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+    }
+    mpl.rcParams.update(params)
 
 
 def history_plot(values, conv_test_freq, ax=None, **kwargs):
@@ -70,7 +62,6 @@ def _annotate_plot(
         )
 
 
-@salamander_style
 def scatter_1d(
     data: np.ndarray, annotations=None, annotation_kwargs=None, ax=None, **kwargs
 ):
@@ -96,7 +87,6 @@ def scatter_1d(
     return ax
 
 
-@salamander_style
 def scatter_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the data points.
@@ -118,7 +108,6 @@ def scatter_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs
     return ax
 
 
-@salamander_style
 def pca_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the data points.
@@ -138,7 +127,6 @@ def pca_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
     return ax
 
 
-@salamander_style
 def tsne_2d(
     data, perplexity=30, annotations=None, annotation_kwargs=None, ax=None, **kwargs
 ):
@@ -163,7 +151,6 @@ def tsne_2d(
     return ax
 
 
-@salamander_style
 def umap_2d(
     data,
     n_neighbors=15,
@@ -195,7 +182,6 @@ def umap_2d(
     return ax
 
 
-@salamander_style
 def embeddings_plot(
     data: np.ndarray,
     method="umap",
@@ -275,7 +261,6 @@ def embeddings_plot(
     return ax
 
 
-@salamander_style
 def plot_history(function_values, figtitle="", ax=None, **kwargs):
     if ax is None:
         ax = plt.gca()
@@ -286,7 +271,6 @@ def plot_history(function_values, figtitle="", ax=None, **kwargs):
     return ax
 
 
-@salamander_style
 def corr_plot(
     corr: pd.DataFrame, figsize=(6, 6), cmap="vlag", annot=True, fmt=".2f", **kwargs
 ):
@@ -348,7 +332,6 @@ def _get_colors_signature_plot(mutation_types, colors=None):
     return colors
 
 
-@salamander_style
 def _signature_plot(
     signature, colors=None, annotate_mutation_types=False, ax=None, **kwargs
 ):
@@ -403,7 +386,6 @@ def _signature_plot(
     return ax
 
 
-@salamander_style
 def signature_plot(
     signature,
     catalog=None,
@@ -466,7 +448,6 @@ def signature_plot(
     return axes
 
 
-@salamander_style
 def signatures_plot(
     signatures,
     catalog=None,
@@ -599,7 +580,6 @@ def _reorder_exposures(
     return exposures_reordered
 
 
-@salamander_style
 def exposures_plot(
     exposures: pd.DataFrame,
     sample_order=None,

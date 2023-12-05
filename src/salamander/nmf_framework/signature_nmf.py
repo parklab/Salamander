@@ -9,7 +9,6 @@ from ..plot import (
     embeddings_plot,
     exposures_plot,
     history_plot,
-    salamander_style,
     signatures_plot,
 )
 from ..utils import type_checker, value_checker
@@ -320,7 +319,6 @@ class SignatureNMF(ABC):
             the mutation types of the count data.
         """
 
-    @salamander_style
     def plot_history(self, ax=None, outfile=None, **kwargs):
         if not self.history:
             raise ValueError(
@@ -336,7 +334,6 @@ class SignatureNMF(ABC):
 
         return ax
 
-    @salamander_style
     def plot_signatures(
         self,
         catalog=None,
@@ -363,7 +360,6 @@ class SignatureNMF(ABC):
 
         return axes
 
-    @salamander_style
     def plot_exposures(
         self,
         sample_order=None,
