@@ -111,6 +111,7 @@ class SignatureNMF(ABC):
         init_method="nndsvd",
         min_iterations=500,
         max_iterations=10000,
+        conv_test_freq=10,
         tol=1e-7,
     ):
         """
@@ -128,6 +129,12 @@ class SignatureNMF(ABC):
 
         max_iterations: int
             The maximum number of iterations to perform by the NMF algorithm
+
+        conv_test_freq: int
+            The frequency at which the algorithm is tested for convergence.
+            The objective function value is only computed every 'conv_test_freq'
+            many iterations, which also affects a potentially saved history of
+            the objective function values.
 
         tol: float
             The NMF algorithm is converged when the relative change of
@@ -151,6 +158,7 @@ class SignatureNMF(ABC):
         self.init_method = init_method
         self.min_iterations = min_iterations
         self.max_iterations = max_iterations
+        self.conv_test_freq = conv_test_freq
         self.tol = tol
 
         # initialize data/fitting dependent attributes

@@ -267,12 +267,13 @@ class CorrNMFDet(CorrNMF):
             if self.n_given_signatures < self.n_signatures:
                 self._update_W()
 
-            prev_of_value = of_values[-1]
-            of_values.append(self.objective_function())
-            rel_change = (of_values[-1] - prev_of_value) / np.abs(prev_of_value)
-            converged = (
-                rel_change < self.tol and n_iteration >= self.min_iterations
-            ) or (n_iteration >= self.max_iterations)
+            if n_iteration % self.conv_test_freq == 0:
+                prev_of_value = of_values[-1]
+                of_values.append(self.objective_function())
+                rel_change = (of_values[-1] - prev_of_value) / np.abs(prev_of_value)
+                converged = rel_change < self.tol and n_iteration >= self.min_iterations
+
+            converged |= n_iteration >= self.max_iterations
 
         if history:
             self.history["objective_function"] = of_values[1:]

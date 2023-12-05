@@ -117,6 +117,12 @@ class MvNMF(NMF):
     max_iterations : int, default=10000
         Maximum number of iterations.
 
+    conv_test_freq: int
+        The frequency at which the algorithm is tested for convergence.
+        The objective function value is only computed every 'conv_test_freq'
+        many iterations, which also affects a potentially saved history of
+        the objective function values.
+
     tol : float, default=1e-7
         Tolerance of the stopping condition.
 
@@ -135,9 +141,17 @@ class MvNMF(NMF):
         delta=1.0,
         min_iterations=500,
         max_iterations=10000,
+        conv_test_freq=10,
         tol=1e-7,
     ):
-        super().__init__(n_signatures, init_method, min_iterations, max_iterations, tol)
+        super().__init__(
+            n_signatures,
+            init_method,
+            min_iterations,
+            max_iterations,
+            conv_test_freq,
+            tol,
+        )
         self.lam = lam
         self.delta = delta
         self._gamma = None
@@ -234,12 +248,13 @@ class MvNMF(NMF):
             if self.n_given_signatures < self.n_signatures:
                 self._update_W()
 
-            prev_of_value = of_values[-1]
-            of_values.append(self.objective_function())
-            rel_change = (prev_of_value - of_values[-1]) / prev_of_value
-            converged = (
-                rel_change < self.tol and n_iteration >= self.min_iterations
-            ) or (n_iteration >= self.max_iterations)
+            if n_iteration % self.conv_test_freq == 0:
+                prev_of_value = of_values[-1]
+                of_values.append(self.objective_function())
+                rel_change = (prev_of_value - of_values[-1]) / prev_of_value
+                converged = rel_change < self.tol and n_iteration >= self.min_iterations
+
+            converged |= n_iteration >= self.max_iterations
 
         if history:
             self.history["objective_function"] = of_values[1:]

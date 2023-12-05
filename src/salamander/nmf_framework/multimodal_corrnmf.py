@@ -39,6 +39,7 @@ class MultimodalCorrNMF:
         init_method="nndsvd",
         min_iterations=500,
         max_iterations=10000,
+        conv_test_freq=10,
         tol=1e-7,
     ):
         self.n_modalities = n_modalities
@@ -55,6 +56,7 @@ class MultimodalCorrNMF:
         self.init_method = init_method
         self.min_iterations = min_iterations
         self.max_iterations = max_iterations
+        self.conv_test_freq = conv_test_freq
         self.tol = tol
         self.models = [
             CorrNMFDet(n_signatures, dim_embeddings, init_method)
@@ -437,12 +439,13 @@ class MultimodalCorrNMF:
             self._update_sigma_sq()
             self._update_Ws()
 
-            prev_of_value = of_values[-1]
-            of_values.append(self.objective_function())
-            rel_change = (of_values[-1] - prev_of_value) / np.abs(prev_of_value)
-            converged = (
-                rel_change < self.tol and n_iteration >= self.min_iterations
-            ) or (n_iteration >= self.max_iterations)
+            if n_iteration % self.conv_test_freq == 0:
+                prev_of_value = of_values[-1]
+                of_values.append(self.objective_function())
+                rel_change = (of_values[-1] - prev_of_value) / np.abs(prev_of_value)
+                converged = rel_change < self.tol and n_iteration >= self.min_iterations
+
+            converged |= n_iteration >= self.max_iterations
 
         if history:
             self.history["objective_function"] = of_values[1:]

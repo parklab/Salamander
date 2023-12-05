@@ -100,6 +100,7 @@ class NMF(SignatureNMF):
         init_method="nndsvd",
         min_iterations=500,
         max_iterations=10000,
+        conv_test_freq=10,
         tol=1e-7,
     ):
         """
@@ -120,12 +121,25 @@ class NMF(SignatureNMF):
         max_iterations: int
             The maximum number of iterations to perform during inference
 
+        conv_test_freq: int
+            The frequency at which the algorithm is tested for convergence.
+            The objective function value is only computed every 'conv_test_freq'
+            many iterations, which also affects a potentially saved history of
+            the objective function values.
+
         tol: float
             The NMF algorithm is converged when the relative change
             of the objective function of one iteration is smaller
             than the tolerance 'tol'.
         """
-        super().__init__(n_signatures, init_method, min_iterations, max_iterations, tol)
+        super().__init__(
+            n_signatures,
+            init_method,
+            min_iterations,
+            max_iterations,
+            conv_test_freq,
+            tol,
+        )
 
         # initialize data/fitting dependent attributes
         self.W, self.H = None, None
@@ -135,7 +149,6 @@ class NMF(SignatureNMF):
         signatures = pd.DataFrame(
             self.W, index=self.mutation_types, columns=self.signature_names
         )
-
         return signatures
 
     @property
@@ -143,7 +156,6 @@ class NMF(SignatureNMF):
         exposures = pd.DataFrame(
             self.H, index=self.signature_names, columns=self.sample_names
         )
-
         return exposures
 
     @property
