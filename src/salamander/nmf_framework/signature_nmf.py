@@ -322,7 +322,8 @@ class SignatureNMF(ABC):
     def plot_history(self, ax=None, outfile=None, **kwargs):
         if not self.history:
             raise ValueError(
-                "No history available, the model has to be fitted first. Remember to set 'history' to 'True' when calling 'fit()'."
+                "No history available, the model has to be fitted first. "
+                "Remember to set 'history' to 'True' when calling 'fit()'."
             )
 
         history_plot(
