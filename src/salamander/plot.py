@@ -44,6 +44,17 @@ def salamander_style(func):
     return rc_wrapper
 
 
+def history_plot(values, conv_test_freq, ax=None, **kwargs):
+    if ax is None:
+        _, ax = plt.subplots(figsize=(4, 4))
+        ax.set(xlabel="n_iteration", ylabel="objective function value")
+
+    n_values = len(values)
+    x = np.arange(conv_test_freq, n_values * conv_test_freq + 1, conv_test_freq)
+    ax.plot(x, values, **kwargs)
+    return ax
+
+
 def _annotate_plot(
     ax, data, annotations, ha="left", fontsize="medium", color="black", **kwargs
 ):

@@ -8,6 +8,7 @@ from ..plot import (
     corr_plot,
     embeddings_plot,
     exposures_plot,
+    history_plot,
     salamander_style,
     signatures_plot,
 )
@@ -318,6 +319,22 @@ class SignatureNMF(ABC):
             algorithm instance, and the mutation type names have to match
             the mutation types of the count data.
         """
+
+    @salamander_style
+    def plot_history(self, ax=None, outfile=None, **kwargs):
+        if not self.history:
+            raise ValueError(
+                "No history available, the model has to be fitted first. Remember to set 'history' to 'True' when calling 'fit()'."
+            )
+
+        history_plot(
+            self.history["objective_function"], self.conv_test_freq, ax=ax, **kwargs
+        )
+
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches="tight")
+
+        return ax
 
     @salamander_style
     def plot_signatures(

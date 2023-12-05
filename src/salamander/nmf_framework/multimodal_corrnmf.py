@@ -20,6 +20,7 @@ from ..plot import (
     _get_sample_order,
     corr_plot,
     embeddings_plot,
+    history_plot,
     salamander_style,
     signatures_plot,
 )
@@ -451,6 +452,22 @@ class MultimodalCorrNMF:
             self.history["objective_function"] = of_values[1:]
 
         return self
+
+    @salamander_style
+    def plot_history(self, ax=None, outfile=None, **kwargs):
+        if not self.history:
+            raise ValueError(
+                "No history available, the model has to be fitted first. Remember to set 'history' to 'True' when calling 'fit()'."
+            )
+
+        history_plot(
+            self.history["objective_function"], self.conv_test_freq, ax=ax, **kwargs
+        )
+
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches="tight")
+
+        return ax
 
     @salamander_style
     def plot_signatures(
