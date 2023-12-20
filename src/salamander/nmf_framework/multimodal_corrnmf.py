@@ -353,6 +353,18 @@ class MultimodalCorrNMF:
         given_sample_embeddings=None,
         init_kwargs=None,
     ):
+        if given_signatures is None:
+            given_signatures = [None for _ in range(self.n_modalities)]
+
+        if given_signature_biases is None:
+            given_signature_biases = [None for _ in range(self.n_modalities)]
+
+        if given_signature_embeddings is None:
+            given_signature_embeddings = [None for _ in range(self.n_modalities)]
+
+        if given_sample_biases is None:
+            given_sample_biases = [None for _ in range(self.n_modalities)]
+
         if given_sample_embeddings is None:
             U = np.random.multivariate_normal(
                 np.zeros(self.dim_embeddings),
@@ -380,8 +392,8 @@ class MultimodalCorrNMF:
             model._initialize(
                 given_signatures=given_sigs,
                 given_signature_biases=given_sig_biases,
-                given_sample_biases=given_sam_biases,
                 given_signature_embeddings=given_sig_embs,
+                given_sample_biases=given_sam_biases,
                 given_sample_embeddings=U,
                 init_kwargs=init_kwargs,
             )
@@ -394,6 +406,12 @@ class MultimodalCorrNMF:
                     ),
                 ]
             )
+        return (
+            given_signature_biases,
+            given_signature_embeddings,
+            given_sample_biases,
+            given_sample_embeddings,
+        )
 
     def fit(
         self,
@@ -407,20 +425,13 @@ class MultimodalCorrNMF:
         history=False,
         verbose=0,
     ):
-        if given_signatures is None:
-            given_signatures = [None for _ in range(self.n_modalities)]
-
-        if given_signature_biases is None:
-            given_signature_biases = [None for _ in range(self.n_modalities)]
-
-        if given_signature_embeddings is None:
-            given_signature_embeddings = [None for _ in range(self.n_modalities)]
-
-        if given_sample_biases is None:
-            given_sample_biases = [None for _ in range(self.n_modalities)]
-
         self._setup_data_parameters(data)
-        self._initialize(
+        (
+            given_signature_biases,
+            given_signature_embeddings,
+            given_sample_biases,
+            given_sample_embeddings,
+        ) = self._initialize(
             given_signatures=given_signatures,
             given_signature_biases=given_signature_biases,
             given_signature_embeddings=given_signature_embeddings,
