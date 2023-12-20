@@ -490,11 +490,10 @@ def signatures_plot(
     if axes is None:
         if catalog is None:
             _, axes = plt.subplots(n_signatures, 1, figsize=(4, n_signatures))
-
         else:
             _, axes = plt.subplots(n_signatures, 2, figsize=(8, n_signatures))
 
-    for ax, signature in zip(axes.flatten(), signatures):
+    for ax, signature in zip(axes, signatures):
         signature_plot(
             signatures[[signature]],
             catalog=catalog,
