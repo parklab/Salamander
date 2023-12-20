@@ -261,16 +261,6 @@ def embeddings_plot(
     return ax
 
 
-def plot_history(function_values, figtitle="", ax=None, **kwargs):
-    if ax is None:
-        ax = plt.gca()
-
-    ax.set(title=figtitle, xlabel="training step", ylabel="objective function")
-    ax.plot(range(len(function_values)), function_values, **kwargs)
-
-    return ax
-
-
 def corr_plot(
     corr: pd.DataFrame, figsize=(6, 6), cmap="vlag", annot=True, fmt=".2f", **kwargs
 ):
