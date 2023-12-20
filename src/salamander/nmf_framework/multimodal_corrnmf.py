@@ -385,8 +385,14 @@ class MultimodalCorrNMF:
                 given_sample_embeddings=U,
                 init_kwargs=init_kwargs,
             )
-            model.signature_names[model.n_given_signatures :] = np.char.add(
-                modality_name + " ", model.signature_names[model.n_given_signatures :]
+            model.signature_names = np.concatenate(
+                [
+                    model.signature_names[: model.n_given_signatures],
+                    np.char.add(
+                        modality_name + " ",
+                        model.signature_names[model.n_given_signatures :],
+                    ),
+                ]
             )
 
     def fit(
