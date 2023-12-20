@@ -36,14 +36,27 @@ def set_salamander_style():
     mpl.rcParams.update(params)
 
 
-def history_plot(values, conv_test_freq, ax=None, **kwargs):
+def history_plot(values, conv_test_freq, min_iteration=0, ax=None, **kwargs):
+    n_values = len(values)
+    ns_iteration = np.arange(
+        conv_test_freq, n_values * conv_test_freq + 1, conv_test_freq
+    )
+
+    if min_iteration > ns_iteration[-1]:
+        raise ValueError(
+            "The smallest iteration number shown in the history plot "
+            "cannot be larger than the total number of iterations."
+        )
     if ax is None:
         _, ax = plt.subplots(figsize=(4, 4))
         ax.set(xlabel="n_iteration", ylabel="objective function value")
 
-    n_values = len(values)
-    x = np.arange(conv_test_freq, n_values * conv_test_freq + 1, conv_test_freq)
-    ax.plot(x, values, **kwargs)
+    min_index = next(
+        idx
+        for idx, n_iteration in enumerate(ns_iteration)
+        if n_iteration >= min_iteration
+    )
+    ax.plot(ns_iteration[min_index:], values[min_index:], **kwargs)
     return ax
 
 

@@ -469,7 +469,7 @@ class MultimodalCorrNMF:
 
         return self
 
-    def plot_history(self, ax=None, outfile=None, **kwargs):
+    def plot_history(self, ax=None, min_iteration=0, outfile=None, **kwargs):
         if not self.history:
             raise ValueError(
                 "No history available, the model has to be fitted first. "
@@ -477,7 +477,11 @@ class MultimodalCorrNMF:
             )
 
         history_plot(
-            self.history["objective_function"], self.conv_test_freq, ax=ax, **kwargs
+            self.history["objective_function"],
+            self.conv_test_freq,
+            min_iteration=min_iteration,
+            ax=ax,
+            **kwargs,
         )
 
         if outfile is not None:
