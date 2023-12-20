@@ -22,6 +22,31 @@ def counts():
     ]
 
 
+def test_init_signature_names(counts):
+    multi_model = multimodal_corrnmf.MultimodalCorrNMF(
+        n_modalities=N_MODALITIES,
+        ns_signatures=NS_SIGNATURES,
+        dim_embeddings=DIM_EMBEDDINGS,
+    )
+    multi_model._setup_data_parameters(counts)
+    # one given signature per modality
+    test_signature_name = "A"
+    given_signatures = [
+        pd.DataFrame(
+            np.arange(data.shape[0]), columns=[test_signature_name], index=data.index
+        )
+        for data in counts
+    ]
+    multi_model._initialize(given_signatures=given_signatures)
+
+    for n, model in enumerate(multi_model.models):
+        for k, signature_name in enumerate(model.signature_names):
+            if k == 0:
+                assert signature_name == test_signature_name
+            else:
+                assert signature_name == f"modality{n} Sig{k}"
+
+
 @pytest.fixture
 def Ws_init():
     return [
