@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 ---
 
+## 0.3.1 - 2023-12
+### Fixed
+  - Improve signature, embedding and history plots
+
 ## 0.3.0 - 2023-10
 ### Added
   - Support a sample-weigted KL-divergence loss in KL-NMF
