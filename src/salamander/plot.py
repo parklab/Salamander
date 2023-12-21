@@ -50,8 +50,8 @@ def history_plot(values, conv_test_freq, min_iteration=0, ax=None, **kwargs):
         )
     if ax is None:
         _, ax = plt.subplots(figsize=(4, 4))
-        ax.set(xlabel="n_iteration", ylabel="objective function value")
 
+    ax.set(xlabel="n_iteration", ylabel="objective function value")
     min_index = next(
         idx
         for idx, n_iteration in enumerate(ns_iteration)
