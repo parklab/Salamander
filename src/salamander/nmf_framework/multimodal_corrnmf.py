@@ -20,7 +20,7 @@ from ..plot import (
     _get_sample_order,
     corr_plot,
     embeddings_plot,
-    salamander_style,
+    history_plot,
     signatures_plot,
 )
 from ..utils import type_checker, value_checker
@@ -39,6 +39,7 @@ class MultimodalCorrNMF:
         init_method="nndsvd",
         min_iterations=500,
         max_iterations=10000,
+        conv_test_freq=10,
         tol=1e-7,
     ):
         self.n_modalities = n_modalities
@@ -55,6 +56,7 @@ class MultimodalCorrNMF:
         self.init_method = init_method
         self.min_iterations = min_iterations
         self.max_iterations = max_iterations
+        self.conv_test_freq = conv_test_freq
         self.tol = tol
         self.models = [
             CorrNMFDet(n_signatures, dim_embeddings, init_method)
@@ -351,6 +353,18 @@ class MultimodalCorrNMF:
         given_sample_embeddings=None,
         init_kwargs=None,
     ):
+        if given_signatures is None:
+            given_signatures = [None for _ in range(self.n_modalities)]
+
+        if given_signature_biases is None:
+            given_signature_biases = [None for _ in range(self.n_modalities)]
+
+        if given_signature_embeddings is None:
+            given_signature_embeddings = [None for _ in range(self.n_modalities)]
+
+        if given_sample_biases is None:
+            given_sample_biases = [None for _ in range(self.n_modalities)]
+
         if given_sample_embeddings is None:
             U = np.random.multivariate_normal(
                 np.zeros(self.dim_embeddings),
@@ -378,14 +392,26 @@ class MultimodalCorrNMF:
             model._initialize(
                 given_signatures=given_sigs,
                 given_signature_biases=given_sig_biases,
-                given_sample_biases=given_sam_biases,
                 given_signature_embeddings=given_sig_embs,
+                given_sample_biases=given_sam_biases,
                 given_sample_embeddings=U,
                 init_kwargs=init_kwargs,
             )
-            model.signature_names[model.n_given_signatures :] = np.char.add(
-                modality_name + " ", model.signature_names[model.n_given_signatures :]
+            model.signature_names = np.concatenate(
+                [
+                    model.signature_names[: model.n_given_signatures],
+                    np.char.add(
+                        modality_name + " ",
+                        model.signature_names[model.n_given_signatures :],
+                    ),
+                ]
             )
+        return (
+            given_signature_biases,
+            given_signature_embeddings,
+            given_sample_biases,
+            given_sample_embeddings,
+        )
 
     def fit(
         self,
@@ -399,20 +425,13 @@ class MultimodalCorrNMF:
         history=False,
         verbose=0,
     ):
-        if given_signatures is None:
-            given_signatures = [None for _ in range(self.n_modalities)]
-
-        if given_signature_biases is None:
-            given_signature_biases = [None for _ in range(self.n_modalities)]
-
-        if given_signature_embeddings is None:
-            given_signature_embeddings = [None for _ in range(self.n_modalities)]
-
-        if given_sample_biases is None:
-            given_sample_biases = [None for _ in range(self.n_modalities)]
-
         self._setup_data_parameters(data)
-        self._initialize(
+        (
+            given_signature_biases,
+            given_signature_embeddings,
+            given_sample_biases,
+            given_sample_embeddings,
+        ) = self._initialize(
             given_signatures=given_signatures,
             given_signature_biases=given_signature_biases,
             given_signature_embeddings=given_signature_embeddings,
@@ -437,19 +456,39 @@ class MultimodalCorrNMF:
             self._update_sigma_sq()
             self._update_Ws()
 
-            prev_of_value = of_values[-1]
-            of_values.append(self.objective_function())
-            rel_change = (of_values[-1] - prev_of_value) / np.abs(prev_of_value)
-            converged = (
-                rel_change < self.tol and n_iteration >= self.min_iterations
-            ) or (n_iteration >= self.max_iterations)
+            if n_iteration % self.conv_test_freq == 0:
+                prev_of_value = of_values[-1]
+                of_values.append(self.objective_function())
+                rel_change = (of_values[-1] - prev_of_value) / np.abs(prev_of_value)
+                converged = rel_change < self.tol and n_iteration >= self.min_iterations
+
+            converged |= n_iteration >= self.max_iterations
 
         if history:
             self.history["objective_function"] = of_values[1:]
 
         return self
 
-    @salamander_style
+    def plot_history(self, ax=None, min_iteration=0, outfile=None, **kwargs):
+        if not self.history:
+            raise ValueError(
+                "No history available, the model has to be fitted first. "
+                "Remember to set 'history' to 'True' when calling 'fit()'."
+            )
+
+        history_plot(
+            self.history["objective_function"],
+            self.conv_test_freq,
+            min_iteration=min_iteration,
+            ax=ax,
+            **kwargs,
+        )
+
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches="tight")
+
+        return ax
+
     def plot_signatures(
         self,
         colors=None,
@@ -486,7 +525,6 @@ class MultimodalCorrNMF:
 
         return axes
 
-    @salamander_style
     def plot_exposures(
         self,
         sample_order=None,
@@ -570,7 +608,6 @@ class MultimodalCorrNMF:
     def corr_samples(self) -> pd.DataFrame:
         return self.models[0].corr_samples
 
-    @salamander_style
     def plot_correlation(self, data="signatures", annot=False, outfile=None, **kwargs):
         """
         Plot the correlation matrix of the signatures or samples.
@@ -596,53 +633,20 @@ class MultimodalCorrNMF:
 
         return clustergrid
 
-    def _get_default_embedding_annotations(self):
-        # Only annotate with the first 20 characters of names
-        annotations = np.empty(np.sum(self.ns_signatures) + self.n_samples, dtype="U20")
-        signature_names = np.concatenate(
-            [model.signature_names for model in self.models]
-        )
-        annotations[: len(signature_names)] = signature_names
-
-        return annotations
-
-    def plot_embeddings(
-        self,
-        method="umap",
-        normalize=False,
-        annotations=None,
-        annotation_kwargs=None,
-        ax=None,
-        outfile=None,
-        **kwargs,
-    ):
+    def plot_embeddings(self, annotations=None, outfile=None, **kwargs):
         """
         Plot the signature and sample embeddings. If the embedding dimension
         is two, the embeddings will be plotted directly, ignoring the chosen method.
-        See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
+        See plot.py for the implementation of 'embeddings_plot'.
 
         Parameters
         ----------
-        method : str, default='umap'
-            Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
-            will be applied to plot the signature and sample embeddings in 2D space.
-
-        normalize : bool, default=False
-            If True, normalize the embeddings before applying the dimensionality
-            reduction.
-
         annotations : list[str], default=None
             Annotations per data point, e.g. the sample names. If None,
             all signatures are annotated.
             Note that there are sum('ns_signatures') + 'n_samples' data points,
             i.e. the first sum('ns_signatures') elements in 'annotations'
             are the signature annotations, not any sample annotations.
-
-        annotation_kwargs : dict, default=None
-            keyword arguments to pass to matplotlibs plt.txt()
-
-        ax : matplotlib.axes.Axes, default=None
-            Pre-existing axes for the plot. Otherwise, an axes is created.
 
         outfile : str, default=None
             If not None, the figure will be saved in the specified file path.
@@ -659,17 +663,11 @@ class MultimodalCorrNMF:
         embedding_data = np.concatenate([Ls, self.models[0].U], axis=1).T.copy()
 
         if annotations is None:
-            annotations = self._get_default_embedding_annotations()
+            annotations = np.concatenate(
+                [model.signature_names for model in self.models]
+            )
 
-        ax = embeddings_plot(
-            embedding_data,
-            method,
-            normalize,
-            annotations,
-            annotation_kwargs,
-            ax,
-            **kwargs,
-        )
+        ax = embeddings_plot(data=embedding_data, annotations=annotations, **kwargs)
 
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")
@@ -705,7 +703,6 @@ class MultimodalCorrNMF:
 
         return results
 
-    @salamander_style
     def plot_feature_change(
         self,
         in_modality=None,

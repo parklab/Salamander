@@ -1,5 +1,4 @@
 import warnings
-from functools import wraps
 
 import fastcluster
 import matplotlib as mpl
@@ -8,6 +7,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import umap
+from adjustText import adjust_text
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import pdist
 from sklearn.decomposition import PCA
@@ -17,196 +17,222 @@ from .consts import COLORS_INDEL83, COLORS_SBS96, INDEL_TYPES_83, SBS_TYPES_96
 from .utils import match_to_catalog, value_checker
 
 
-def salamander_style(func):
-    @wraps(func)
-    def rc_wrapper(*args, **kwargs):
-        sns.set_context("notebook")
-        sns.set_style("ticks")
+def set_salamander_style():
+    sns.set_context("notebook")
+    sns.set_style("ticks")
+    params = {
+        "axes.edgecolor": "black",
+        "axes.labelsize": 14,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.titlesize": 16,
+        "errorbar.capsize": 3,
+        "font.family": "DejaVu Sans",
+        "legend.fontsize": 12,
+        "lines.markersize": 8,
+        "pdf.fonttype": 42,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+    }
+    mpl.rcParams.update(params)
 
-        params = {
-            "axes.edgecolor": "black",
-            "axes.labelsize": 14,
-            "axes.spines.top": False,
-            "axes.spines.right": False,
-            "axes.titlesize": 16,
-            "errorbar.capsize": 3,
-            "font.family": "DejaVu Sans",
-            "legend.fontsize": 12,
-            "lines.markersize": 8,
-            "pdf.fonttype": 42,
-            "xtick.labelsize": 12,
-            "ytick.labelsize": 12,
-        }
-        mpl.rcParams.update(params)
 
-        return func(*args, **kwargs)
+def history_plot(values, conv_test_freq, min_iteration=0, ax=None, **kwargs):
+    n_values = len(values)
+    ns_iteration = np.arange(
+        conv_test_freq, n_values * conv_test_freq + 1, conv_test_freq
+    )
 
-    return rc_wrapper
+    if min_iteration > ns_iteration[-1]:
+        raise ValueError(
+            "The smallest iteration number shown in the history plot "
+            "cannot be larger than the total number of iterations."
+        )
+    if ax is None:
+        _, ax = plt.subplots(figsize=(4, 4))
+        ax.set(xlabel="n_iteration", ylabel="objective function value")
+
+    min_index = next(
+        idx
+        for idx, n_iteration in enumerate(ns_iteration)
+        if n_iteration >= min_iteration
+    )
+    ax.plot(ns_iteration[min_index:], values[min_index:], **kwargs)
+    return ax
 
 
 def _annotate_plot(
-    ax, data, annotations, ha="left", fontsize="medium", color="black", **kwargs
+    ax,
+    data,
+    annotations,
+    ha="left",
+    fontsize="medium",
+    color="black",
+    adjust_annotations=True,
+    adjust_kwargs=None,
+    **kwargs,
 ):
     for data_point, annotation in zip(data, annotations):
         ax.text(
-            data_point[0] + 0.01,
-            data_point[1] + 0.01,
+            data_point[0],
+            data_point[1],
             annotation,
             ha=ha,
             fontsize=fontsize,
             color=color,
             **kwargs,
         )
+    if adjust_annotations:
+        if adjust_kwargs is None:
+            adjust_kwargs = {} if adjust_kwargs is None else adjust_kwargs.copy()
+
+        annotations = [
+            child for child in ax.get_children() if isinstance(child, mpl.text.Text)
+        ]
+        annotations = [
+            annotation for annotation in annotations if annotation.get_text()
+        ]
+        adjust_text(annotations, **adjust_kwargs)
 
 
-@salamander_style
-def scatter_1d(
-    data: np.ndarray, annotations=None, annotation_kwargs=None, ax=None, **kwargs
-):
+def _scatter_1d(data: np.ndarray, ax=None, **kwargs):
     if data.ndim != 1:
         raise ValueError(f"The datapoints of {data} (rows) have to be one-dimensional.")
-
-    annotation_kwargs = {} if annotation_kwargs is None else annotation_kwargs.copy()
 
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 1))
 
-    y_coordinates = np.zeros_like(data)
-
     ax.spines[["left", "bottom"]].set_visible(False)
     ax.get_yaxis().set_visible(False)
     ax.axhline(y=0, color="black", zorder=1)
-    sns.scatterplot(x=data, y=y_coordinates, ax=ax, zorder=2, **kwargs)
-
-    if annotations is not None:
-        annotation_data = np.vstack([data, y_coordinates]).T
-        _annotate_plot(ax, annotation_data, annotations, **annotation_kwargs)
-
-    return ax
+    data_2d = np.vstack([data, np.zeros_like(data)]).T
+    sns.scatterplot(x=data_2d[:, 0], y=data_2d[:, 1], ax=ax, zorder=2, **kwargs)
+    return data_2d, ax
 
 
-@salamander_style
-def scatter_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
+def _scatter_2d(data, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the data points.
     """
     if data.shape[1] != 2:
         raise ValueError(f"The datapoints of {data} (rows) have to be two-dimensional.")
 
-    annotation_kwargs = {} if annotation_kwargs is None else annotation_kwargs.copy()
-
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 6))
 
     ax.set(xlabel="x", ylabel="y")
     sns.scatterplot(x=data[:, 0], y=data[:, 1], ax=ax, **kwargs)
-
-    if annotations is not None:
-        _annotate_plot(ax, data, annotations, **annotation_kwargs)
-
-    return ax
+    return data, ax
 
 
-@salamander_style
-def pca_2d(data, annotations=None, annotation_kwargs=None, ax=None, **kwargs):
+def _pca_2d(data, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the data points.
     """
-    data_projected = PCA(n_components=2).fit_transform(data)
-    annotation_kwargs = {} if annotation_kwargs is None else annotation_kwargs.copy()
-
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 6))
 
+    data_2d = PCA(n_components=2).fit_transform(data)
     ax.set(xlabel="PC1", ylabel="PC2")
-    sns.scatterplot(x=data_projected[:, 0], y=data_projected[:, 1], ax=ax, **kwargs)
-
-    if annotations is not None:
-        _annotate_plot(ax, data_projected, annotations, **annotation_kwargs)
-
-    return ax
+    sns.scatterplot(x=data_2d[:, 0], y=data_2d[:, 1], ax=ax, **kwargs)
+    return data_2d, ax
 
 
-@salamander_style
-def tsne_2d(
-    data, perplexity=30, annotations=None, annotation_kwargs=None, ax=None, **kwargs
-):
+def _tsne_2d(data, perplexity=30, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the single data points.
     """
-    annotation_kwargs = {} if annotation_kwargs is None else annotation_kwargs.copy()
-
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 6))
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        data_projected = TSNE(perplexity=perplexity).fit_transform(data)
+        perplexity = min(perplexity, len(data) - 1)
+        data_2d = TSNE(perplexity=perplexity).fit_transform(data)
 
     ax.set(xlabel="t-SNE1", xticks=[], ylabel="t-SNE2", yticks=[])
-    sns.scatterplot(x=data_projected[:, 0], y=data_projected[:, 1], ax=ax, **kwargs)
-
-    if annotations is not None:
-        _annotate_plot(ax, data_projected, annotations, **annotation_kwargs)
-
-    return ax
+    sns.scatterplot(x=data_2d[:, 0], y=data_2d[:, 1], ax=ax, **kwargs)
+    return data_2d, ax
 
 
-@salamander_style
-def umap_2d(
-    data,
-    n_neighbors=15,
-    min_dist=0.1,
-    annotations=None,
-    annotation_kwargs=None,
-    ax=None,
-    **kwargs,
-):
+def _umap_2d(data, n_neighbors=15, min_dist=0.1, ax=None, **kwargs):
     """
     The rows (!) of 'data' are assumed to be the single data points.
     """
-    annotation_kwargs = {} if annotation_kwargs is None else annotation_kwargs.copy()
-
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 6))
 
     n_neighbors = min(n_neighbors, len(data) - 1)
-    data_projected = umap.UMAP(
-        n_neighbors=n_neighbors, min_dist=min_dist
-    ).fit_transform(data)
+    data_2d = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist).fit_transform(data)
 
     ax.set(xlabel="UMAP1", xticks=[], ylabel="UMAP2", yticks=[])
-    sns.scatterplot(x=data_projected[:, 0], y=data_projected[:, 1], ax=ax, **kwargs)
-
-    if annotations is not None:
-        _annotate_plot(ax, data_projected, annotations, **annotation_kwargs)
-
-    return ax
+    sns.scatterplot(x=data_2d[:, 0], y=data_2d[:, 1], ax=ax, **kwargs)
+    return data_2d, ax
 
 
-@salamander_style
 def embeddings_plot(
     data: np.ndarray,
     method="umap",
     normalize=False,
     annotations=None,
     annotation_kwargs=None,
+    adjust_annotations=True,
+    adjust_kwargs=None,
     ax=None,
     **kwargs,
 ):
     """
-    The rows (!) of 'data' are assumed to be the single data points.
+    Plot a dimensionality reduction of high-dimensional data.
+    If the dimension of the data is one or two, it is plotted
+    directly, ignoring the chosen method.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The rows (!) are assumed to be the data points.
+
+    method : str, default='umap'
+        Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
+        is applied to plot the data in 2D. If the dimensionality of the data is
+        less or equal to two, the points are plotted directly.
+
+    normalize : bool, default=False
+        If True, the data points are normalized to have a Euclidean norm of
+        one before applying the dimensionality reduction.
+
+    annotations : list[str], default=None
+        Annotations of the projected data points. The length of the list has to match
+        the number of data points.
+
+    annotation_kwargs : dict, default=None
+        keyword arguments to pass to matplotlibs plt.txt()
+
+    adjust_annotations : bool, default=True
+        If True, the annotations are adjusted to prevent them from overlapping.
+
+    adjust_kwargs : dict, default=None
+        keyword arguments to pass to adjustText's adjust_text.
+        This is for example useful when arrows connecting the projected
+        data points and the adjusted positions of the annotations
+        should be added.
+
+    ax : matplotlib.axes.Axes, default=None
+        Pre-existing axes for the plot. Otherwise, an axes is created.
+
+    **kwargs :
+        keyword arguments to pass to seaborn's scatterplot
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The matplotlib axes containing the plot.
     """
     value_checker("method", method, ["pca", "tsne", "umap"])
 
     if normalize:
-        data /= data.sum(axis=1)[:, np.newaxis]
+        data /= np.sqrt(np.sum(data**2, axis=1))[:, np.newaxis]
 
-    if ax is None:
-        _, ax = plt.subplots(figsize=(6, 6))
-
-    annotation_kwargs = {} if annotation_kwargs is None else annotation_kwargs.copy()
-    n_dimensions = data.shape[0]
+    n_dimensions = data.shape[1]
 
     if n_dimensions in [1, 2]:
         warnings.warn(
@@ -217,65 +243,32 @@ def embeddings_plot(
         )
 
     if n_dimensions == 1:
-        ax = scatter_1d(
-            data[:, 0],
-            annotations=annotations,
-            annotation_kwargs=annotation_kwargs,
-            ax=ax,
-            **kwargs,
-        )
-
+        data_2d, ax = _scatter_1d(data[:, 0], ax=ax, **kwargs)
     elif n_dimensions == 2:
-        ax = scatter_2d(
-            data,
-            annotations=annotations,
-            annotation_kwargs=annotation_kwargs,
-            ax=ax,
-            **kwargs,
-        )
-
+        data_2d, ax = _scatter_2d(data, ax=ax, **kwargs)
     elif method == "tsne":
-        ax = tsne_2d(
-            data,
-            annotations=annotations,
-            annotation_kwargs=annotation_kwargs,
-            ax=ax,
-            **kwargs,
-        )
-
+        data_2d, ax = _tsne_2d(data, ax=ax, **kwargs)
     elif method == "pca":
-        ax = pca_2d(
-            data,
-            annotations=annotations,
-            annotation_kwargs=annotation_kwargs,
-            ax=ax,
-            **kwargs,
-        )
-
+        data_2d, ax = _pca_2d(data, ax=ax, **kwargs)
     else:
-        ax = umap_2d(
-            data,
-            annotations=annotations,
-            annotation_kwargs=annotation_kwargs,
-            ax=ax,
-            **kwargs,
+        data_2d, ax = _umap_2d(data, ax=ax, **kwargs)
+
+    if annotations is not None:
+        annotation_kwargs = (
+            {} if annotation_kwargs is None else annotation_kwargs.copy()
+        )
+        _annotate_plot(
+            ax,
+            data_2d,
+            annotations,
+            adjust_annotations=adjust_annotations,
+            adjust_kwargs=adjust_kwargs,
+            **annotation_kwargs,
         )
 
     return ax
 
 
-@salamander_style
-def plot_history(function_values, figtitle="", ax=None, **kwargs):
-    if ax is None:
-        ax = plt.gca()
-
-    ax.set(title=figtitle, xlabel="training step", ylabel="objective function")
-    ax.plot(range(len(function_values)), function_values, **kwargs)
-
-    return ax
-
-
-@salamander_style
 def corr_plot(
     corr: pd.DataFrame, figsize=(6, 6), cmap="vlag", annot=True, fmt=".2f", **kwargs
 ):
@@ -337,7 +330,6 @@ def _get_colors_signature_plot(mutation_types, colors=None):
     return colors
 
 
-@salamander_style
 def _signature_plot(
     signature, colors=None, annotate_mutation_types=False, ax=None, **kwargs
 ):
@@ -392,7 +384,6 @@ def _signature_plot(
     return ax
 
 
-@salamander_style
 def signature_plot(
     signature,
     catalog=None,
@@ -455,7 +446,6 @@ def signature_plot(
     return axes
 
 
-@salamander_style
 def signatures_plot(
     signatures,
     catalog=None,
@@ -495,11 +485,10 @@ def signatures_plot(
     if axes is None:
         if catalog is None:
             _, axes = plt.subplots(n_signatures, 1, figsize=(4, n_signatures))
-
         else:
             _, axes = plt.subplots(n_signatures, 2, figsize=(8, n_signatures))
 
-    for ax, signature in zip(axes.flatten(), signatures):
+    for ax, signature in zip(axes, signatures):
         signature_plot(
             signatures[[signature]],
             catalog=catalog,
@@ -588,7 +577,6 @@ def _reorder_exposures(
     return exposures_reordered
 
 
-@salamander_style
 def exposures_plot(
     exposures: pd.DataFrame,
     sample_order=None,

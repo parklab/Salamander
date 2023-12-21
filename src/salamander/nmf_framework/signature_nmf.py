@@ -8,7 +8,7 @@ from ..plot import (
     corr_plot,
     embeddings_plot,
     exposures_plot,
-    salamander_style,
+    history_plot,
     signatures_plot,
 )
 from ..utils import type_checker, value_checker
@@ -111,6 +111,7 @@ class SignatureNMF(ABC):
         init_method="nndsvd",
         min_iterations=500,
         max_iterations=10000,
+        conv_test_freq=10,
         tol=1e-7,
     ):
         """
@@ -128,6 +129,12 @@ class SignatureNMF(ABC):
 
         max_iterations: int
             The maximum number of iterations to perform by the NMF algorithm
+
+        conv_test_freq: int
+            The frequency at which the algorithm is tested for convergence.
+            The objective function value is only computed every 'conv_test_freq'
+            many iterations, which also affects a potentially saved history of
+            the objective function values.
 
         tol: float
             The NMF algorithm is converged when the relative change of
@@ -151,6 +158,7 @@ class SignatureNMF(ABC):
         self.init_method = init_method
         self.min_iterations = min_iterations
         self.max_iterations = max_iterations
+        self.conv_test_freq = conv_test_freq
         self.tol = tol
 
         # initialize data/fitting dependent attributes
@@ -311,7 +319,26 @@ class SignatureNMF(ABC):
             the mutation types of the count data.
         """
 
-    @salamander_style
+    def plot_history(self, ax=None, min_iteration=0, outfile=None, **kwargs):
+        if not self.history:
+            raise ValueError(
+                "No history available, the model has to be fitted first. "
+                "Remember to set 'history' to 'True' when calling 'fit()'."
+            )
+
+        history_plot(
+            self.history["objective_function"],
+            self.conv_test_freq,
+            min_iteration=min_iteration,
+            ax=ax,
+            **kwargs,
+        )
+
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches="tight")
+
+        return ax
+
     def plot_signatures(
         self,
         catalog=None,
@@ -338,7 +365,6 @@ class SignatureNMF(ABC):
 
         return axes
 
-    @salamander_style
     def plot_exposures(
         self,
         sample_order=None,
@@ -424,35 +450,19 @@ class SignatureNMF(ABC):
         Get the annotations of the data points in the embedding plot.
         """
 
-    def plot_embeddings(
-        self,
-        method="umap",
-        normalize=False,
-        annotations=None,
-        annotation_kwargs=None,
-        ax=None,
-        outfile=None,
-        **kwargs,
-    ):
+    def plot_embeddings(self, annotations=None, outfile=None, **kwargs):
         """
         Plot a dimensionality reduction of the exposure representation.
         In most NMF algorithms, this is just the exposures of the samples.
         In CorrNMF, the exposures matrix is refactored, and there are both
-        sample and signature exposures in a shared embedding space.
+        sample and signature embeddings in a shared embedding space.
 
         If the embedding dimension is one or two, the embeddings are be plotted
         directly, ignoring the chosen method.
-        See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
+        See plot.py for the implementation of 'embeddings_plot'.
 
         Parameters
         ----------
-        method : str, default='umap'
-            Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
-            will be applied to plot the data in 2D space.
-
-        normalize : bool, default=False
-            If True, normalize the data before applying the dimensionality reduction.
-
         annotations : list[str], default=None
             Annotations per data point, e.g. the sample names. If None,
             the algorithm-specific default annotations are used.
@@ -460,12 +470,6 @@ class SignatureNMF(ABC):
             Note that there are 'n_signatures' + 'n_samples' data points in CorrNMF,
             i.e. the first 'n_signatures' elements in 'annotations'
             are the signature annotations, not any sample annotations.
-
-        annotation_kwargs : dict, default=None
-            keyword arguments to pass to matplotlibs plt.txt()
-
-        ax : matplotlib.axes.Axes, default=None
-            Pre-existing axes for the plot. Otherwise, an axes is created.
 
         outfile : str, default=None
             If not None, the figure will be saved in the specified file path.
@@ -484,15 +488,7 @@ class SignatureNMF(ABC):
         if annotations is None:
             annotations = self._get_default_embedding_annotations()
 
-        ax = embeddings_plot(
-            embedding_data,
-            method,
-            normalize,
-            annotations,
-            annotation_kwargs,
-            ax,
-            **kwargs,
-        )
+        ax = embeddings_plot(data=embedding_data, annotations=annotations, **kwargs)
 
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")

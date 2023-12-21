@@ -37,6 +37,12 @@ class KLNMF(NMF):
     max_iterations : int, default=10000
         Maximum number of iterations.
 
+    conv_test_freq: int
+        The frequency at which the algorithm is tested for convergence.
+        The objective function value is only computed every 'conv_test_freq'
+        many iterations, which also affects a potentially saved history of
+        the objective function values.
+
     tol : float, default=1e-7
         Tolerance of the stopping condition.
 
@@ -54,9 +60,17 @@ class KLNMF(NMF):
         update_method="mu-joint",
         min_iterations=500,
         max_iterations=10000,
+        conv_test_freq=10,
         tol=1e-7,
     ):
-        super().__init__(n_signatures, init_method, min_iterations, max_iterations, tol)
+        super().__init__(
+            n_signatures,
+            init_method,
+            min_iterations,
+            max_iterations,
+            conv_test_freq,
+            tol,
+        )
         value_checker("update method", update_method, ["mu-standard", "mu-joint"])
         self.update_method = update_method
         self.weights_kl = None
@@ -196,7 +210,7 @@ class KLNMF(NMF):
 
         history : bool, default=False
             If True, the objective function value will be stored after every
-            iteration.
+            'conv_test_freq' many iterations.
 
         verbose : int, default=0
             verbosity level
@@ -220,12 +234,14 @@ class KLNMF(NMF):
                 print(f"iteration: {n_iteration}; objective: {of_values[-1]:.2f}")
 
             self._update_WH()
-            prev_of_value = of_values[-1]
-            of_values.append(self.objective_function())
-            rel_change = (prev_of_value - of_values[-1]) / prev_of_value
-            converged = (
-                rel_change < self.tol and n_iteration >= self.min_iterations
-            ) or (n_iteration >= self.max_iterations)
+
+            if n_iteration % self.conv_test_freq == 0:
+                prev_of_value = of_values[-1]
+                of_values.append(self.objective_function())
+                rel_change = (prev_of_value - of_values[-1]) / prev_of_value
+                converged = rel_change < self.tol and n_iteration >= self.min_iterations
+
+            converged |= n_iteration >= self.max_iterations
 
         if history:
             self.history["objective_function"] = of_values[1:]
