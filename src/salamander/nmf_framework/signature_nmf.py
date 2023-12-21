@@ -450,35 +450,19 @@ class SignatureNMF(ABC):
         Get the annotations of the data points in the embedding plot.
         """
 
-    def plot_embeddings(
-        self,
-        method="umap",
-        normalize=False,
-        annotations=None,
-        annotation_kwargs=None,
-        ax=None,
-        outfile=None,
-        **kwargs,
-    ):
+    def plot_embeddings(self, annotations=None, outfile=None, **kwargs):
         """
         Plot a dimensionality reduction of the exposure representation.
         In most NMF algorithms, this is just the exposures of the samples.
         In CorrNMF, the exposures matrix is refactored, and there are both
-        sample and signature exposures in a shared embedding space.
+        sample and signature embeddings in a shared embedding space.
 
         If the embedding dimension is one or two, the embeddings are be plotted
         directly, ignoring the chosen method.
-        See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
+        See plot.py for the implementation of 'embeddings_plot'.
 
         Parameters
         ----------
-        method : str, default='umap'
-            Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
-            will be applied to plot the data in 2D space.
-
-        normalize : bool, default=False
-            If True, normalize the data before applying the dimensionality reduction.
-
         annotations : list[str], default=None
             Annotations per data point, e.g. the sample names. If None,
             the algorithm-specific default annotations are used.
@@ -486,12 +470,6 @@ class SignatureNMF(ABC):
             Note that there are 'n_signatures' + 'n_samples' data points in CorrNMF,
             i.e. the first 'n_signatures' elements in 'annotations'
             are the signature annotations, not any sample annotations.
-
-        annotation_kwargs : dict, default=None
-            keyword arguments to pass to matplotlibs plt.txt()
-
-        ax : matplotlib.axes.Axes, default=None
-            Pre-existing axes for the plot. Otherwise, an axes is created.
 
         outfile : str, default=None
             If not None, the figure will be saved in the specified file path.
@@ -510,15 +488,7 @@ class SignatureNMF(ABC):
         if annotations is None:
             annotations = self._get_default_embedding_annotations()
 
-        ax = embeddings_plot(
-            embedding_data,
-            method,
-            normalize,
-            annotations,
-            annotation_kwargs,
-            ax,
-            **kwargs,
-        )
+        ax = embeddings_plot(data=embedding_data, annotations=annotations, **kwargs)
 
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")

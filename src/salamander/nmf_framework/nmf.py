@@ -243,8 +243,8 @@ class NMF(SignatureNMF):
         """
         return self.H.T.copy()
 
-    def _get_default_embedding_annotations(self) -> np.ndarray:
+    def _get_default_embedding_annotations(self):
         """
         The embedding plot defaults to no annotations.
         """
-        return np.empty(self.n_samples, dtype=str)
+        return None

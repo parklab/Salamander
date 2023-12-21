@@ -537,8 +537,4 @@ class CorrNMF(SignatureNMF):
         """
         The embedding plot defaults to annotating the signature embeddings.
         """
-        # Only annotate with the first 20 characters of names
-        annotations = np.empty(self.n_signatures + self.n_samples, dtype="U20")
-        annotations[: self.n_signatures] = self.signature_names
-
-        return annotations
+        return self.signature_names

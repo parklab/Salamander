@@ -633,53 +633,20 @@ class MultimodalCorrNMF:
 
         return clustergrid
 
-    def _get_default_embedding_annotations(self):
-        # Only annotate with the first 20 characters of names
-        annotations = np.empty(np.sum(self.ns_signatures) + self.n_samples, dtype="U20")
-        signature_names = np.concatenate(
-            [model.signature_names for model in self.models]
-        )
-        annotations[: len(signature_names)] = signature_names
-
-        return annotations
-
-    def plot_embeddings(
-        self,
-        method="umap",
-        normalize=False,
-        annotations=None,
-        annotation_kwargs=None,
-        ax=None,
-        outfile=None,
-        **kwargs,
-    ):
+    def plot_embeddings(self, annotations=None, outfile=None, **kwargs):
         """
         Plot the signature and sample embeddings. If the embedding dimension
         is two, the embeddings will be plotted directly, ignoring the chosen method.
-        See plot.py for the implementation of scatter_2d, tsne_2d, pca_2d, umap_2d.
+        See plot.py for the implementation of 'embeddings_plot'.
 
         Parameters
         ----------
-        method : str, default='umap'
-            Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
-            will be applied to plot the signature and sample embeddings in 2D space.
-
-        normalize : bool, default=False
-            If True, normalize the embeddings before applying the dimensionality
-            reduction.
-
         annotations : list[str], default=None
             Annotations per data point, e.g. the sample names. If None,
             all signatures are annotated.
             Note that there are sum('ns_signatures') + 'n_samples' data points,
             i.e. the first sum('ns_signatures') elements in 'annotations'
             are the signature annotations, not any sample annotations.
-
-        annotation_kwargs : dict, default=None
-            keyword arguments to pass to matplotlibs plt.txt()
-
-        ax : matplotlib.axes.Axes, default=None
-            Pre-existing axes for the plot. Otherwise, an axes is created.
 
         outfile : str, default=None
             If not None, the figure will be saved in the specified file path.
@@ -696,17 +663,11 @@ class MultimodalCorrNMF:
         embedding_data = np.concatenate([Ls, self.models[0].U], axis=1).T.copy()
 
         if annotations is None:
-            annotations = self._get_default_embedding_annotations()
+            annotations = np.concatenate(
+                [model.signature_names for model in self.models]
+            )
 
-        ax = embeddings_plot(
-            embedding_data,
-            method,
-            normalize,
-            annotations,
-            annotation_kwargs,
-            ax,
-            **kwargs,
-        )
+        ax = embeddings_plot(data=embedding_data, annotations=annotations, **kwargs)
 
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")
