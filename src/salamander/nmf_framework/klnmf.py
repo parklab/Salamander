@@ -11,9 +11,11 @@ EPSILON = np.finfo(np.float32).eps
 class KLNMF(NMF):
     """
     Decompose a mutation count matrix X into the product of a signature
-    matrix W and an exposure matrix H by minimizing the generalized
-    Kullback-Leibler (KL) divergence under the constraint of having
-    normalized signatures.
+    matrix W and an exposure matrix H by minimizing the weighted
+    generalized Kullback-Leibler (KL) divergence under the constraint of
+    having normalized signatures.
+    The implementation supports a sparstiy-inducing l_half penalty of the
+    exposures.
 
     Parameters
     ----------

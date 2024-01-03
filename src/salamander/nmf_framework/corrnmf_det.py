@@ -20,17 +20,16 @@ class CorrNMFDet(CorrNMF):
     "Bayesian Nonnegative Matrix Factorization with Stochastic Variational
     Inference" by Paisley et al.
 
-    The following methods are implemented to match the structure
-    of the abstract class CorrNMF:
+    The following methods are implemented to match the structure of CorrNMF:
 
         - _update_alpha:
-            update the sample exposure biases \alpha
+            update the sample biases \alpha
 
         - _update_beta:
             update the signature biases \beta
 
         - _update_sigma_sq:
-            update the variance \sigma^2 assumed in the generative model
+            update the variance \sigma^2
 
         - _update_W:
             update the signature matrix W
@@ -47,8 +46,7 @@ class CorrNMFDet(CorrNMF):
     The following method is implemented to match the structure of SignatureNMF:
 
         - fit:
-            Perform CorrNMF for the given mutation count data or
-            for given signatures and mutation count data
+            Inference of the CorrNMF parameters for a given mutation count data
     """
 
     def _update_alpha(self, given_sample_biases=None):
