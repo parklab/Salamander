@@ -187,14 +187,15 @@ class MultimodalCorrNMF:
         for model, p, given_sig_biases in zip(self.models, ps, given_signature_biases):
             model._update_beta(p, given_sig_biases)
 
-    def _update_sigma_sq(self):
-        Ls = np.concatenate([model.L for model in self.models], axis=1)
-        embeddings = np.concatenate([Ls, self.models[0].U], axis=1)
-        sigma_sq = np.mean(embeddings**2)
-        sigma_sq = np.clip(sigma_sq, EPSILON, None)
+    def _update_sigma_sq(self, given_variance):
+        if given_variance is None:
+            Ls = np.concatenate([model.L for model in self.models], axis=1)
+            embeddings = np.concatenate([Ls, self.models[0].U], axis=1)
+            sigma_sq = np.mean(embeddings**2)
+            sigma_sq = np.clip(sigma_sq, EPSILON, None)
 
-        for model in self.models:
-            model.sigma_sq = sigma_sq
+            for model in self.models:
+                model.sigma_sq = sigma_sq
 
     def _update_Ws(self):
         for model in self.models:
@@ -351,10 +352,16 @@ class MultimodalCorrNMF:
         given_signature_embeddings=None,
         given_sample_biases=None,
         given_sample_embeddings=None,
+        given_variance=None,
         init_kwargs=None,
     ):
         if given_signatures is None:
             given_signatures = [None for _ in range(self.n_modalities)]
+
+        if given_variance is None:
+            variance = 1.0
+        else:
+            variance = given_variance
 
         if given_signature_biases is None:
             given_signature_biases = [None for _ in range(self.n_modalities)]
@@ -368,7 +375,7 @@ class MultimodalCorrNMF:
         if given_sample_embeddings is None:
             U = np.random.multivariate_normal(
                 np.zeros(self.dim_embeddings),
-                np.identity(self.dim_embeddings),
+                variance * np.identity(self.dim_embeddings),
                 size=self.n_samples,
             ).T
         else:
@@ -395,6 +402,7 @@ class MultimodalCorrNMF:
                 given_signature_embeddings=given_sig_embs,
                 given_sample_biases=given_sam_biases,
                 given_sample_embeddings=U,
+                given_variance=variance,
                 init_kwargs=init_kwargs,
             )
             model.signature_names = np.concatenate(
@@ -410,7 +418,6 @@ class MultimodalCorrNMF:
             given_signature_biases,
             given_signature_embeddings,
             given_sample_biases,
-            given_sample_embeddings,
         )
 
     def fit(
@@ -421,6 +428,7 @@ class MultimodalCorrNMF:
         given_signature_embeddings=None,
         given_sample_biases=None,
         given_sample_embeddings=None,
+        given_variance=None,
         init_kwargs=None,
         history=False,
         verbose=0,
@@ -430,13 +438,13 @@ class MultimodalCorrNMF:
             given_signature_biases,
             given_signature_embeddings,
             given_sample_biases,
-            given_sample_embeddings,
         ) = self._initialize(
             given_signatures=given_signatures,
             given_signature_biases=given_signature_biases,
             given_signature_embeddings=given_signature_embeddings,
             given_sample_biases=given_sample_biases,
             given_sample_embeddings=given_sample_embeddings,
+            given_variance=given_variance,
             init_kwargs=init_kwargs,
         )
         of_values = [self.objective_function()]
@@ -453,7 +461,7 @@ class MultimodalCorrNMF:
             ps = self._update_ps()
             self._update_betas(ps, given_signature_biases)
             self._update_LsU(ps, given_signature_embeddings, given_sample_embeddings)
-            self._update_sigma_sq()
+            self._update_sigma_sq(given_variance)
             self._update_Ws()
 
             if n_iteration % self.conv_test_freq == 0:

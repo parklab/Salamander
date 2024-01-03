@@ -355,6 +355,7 @@ class CorrNMF(SignatureNMF):
         given_signature_embeddings,
         given_sample_biases,
         given_sample_embeddings,
+        given_variance,
     ):
         if given_signatures is not None:
             self._check_given_signatures(given_signatures)
@@ -381,6 +382,11 @@ class CorrNMF(SignatureNMF):
                 given_sample_embeddings, self.n_samples, "given_sample_embeddings"
             )
 
+        if given_variance is not None:
+            type_checker("given_variance", given_variance, [float, int])
+            if given_variance <= 0.0:
+                raise ValueError("The variance has to be a positive real number.")
+
     def _initialize(
         self,
         given_signatures=None,
@@ -388,11 +394,12 @@ class CorrNMF(SignatureNMF):
         given_signature_embeddings=None,
         given_sample_biases=None,
         given_sample_embeddings=None,
+        given_variance=None,
         init_kwargs=None,
     ):
         """
         Initialize the signature matrix W, sample biases alpha, signature biases beta,
-        the squared variance, and the signature and sample embeddings.
+        the variance, and the signature and sample embeddings.
         The signatures or signature embeddings can also be provided by the user.
 
         Parameters
@@ -417,6 +424,9 @@ class CorrNMF(SignatureNMF):
         given_sample_embeddings : np.ndarray, default=None
             A priori known sample embeddings of shape (dim_embeddings, n_samples).
 
+        given_variance : float, default=None
+            A priori known model variance of the embeddings.
+
         init_kwargs : dict
             Any further keyword arguments to pass to the initialization method.
             This includes, for example, a possible 'seed' keyword argument
@@ -428,6 +438,7 @@ class CorrNMF(SignatureNMF):
             given_signature_embeddings,
             given_sample_biases,
             given_sample_embeddings,
+            given_variance,
         )
 
         if given_signatures is not None:
@@ -439,7 +450,11 @@ class CorrNMF(SignatureNMF):
         self.W, _, self.signature_names = initialize(
             self.X, self.n_signatures, self.init_method, given_signatures, **init_kwargs
         )
-        self.sigma_sq = 1.0
+
+        if given_variance is None:
+            self.sigma_sq = 1.0
+        else:
+            self.sigma_sq = float(given_variance)
 
         if given_signature_biases is None:
             self.beta = np.zeros(self.n_signatures)
@@ -449,7 +464,7 @@ class CorrNMF(SignatureNMF):
         if given_signature_embeddings is None:
             self.L = np.random.multivariate_normal(
                 np.zeros(self.dim_embeddings),
-                np.identity(self.dim_embeddings),
+                self.sigma_sq * np.identity(self.dim_embeddings),
                 size=self.n_signatures,
             ).T
         else:
@@ -463,7 +478,7 @@ class CorrNMF(SignatureNMF):
         if given_sample_embeddings is None:
             self.U = np.random.multivariate_normal(
                 np.zeros(self.dim_embeddings),
-                np.identity(self.dim_embeddings),
+                self.sigma_sq * np.identity(self.dim_embeddings),
                 size=self.n_samples,
             ).T
         else:

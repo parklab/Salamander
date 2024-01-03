@@ -239,7 +239,8 @@ class TestUpdatesMultimodalCorrNMF:
             assert np.allclose(model.U, U_updated)
 
     def test_update_sigma_sq(self, multi_model_init, sigma_sq_updated):
-        multi_model_init._update_sigma_sq()
+        given_variance = None
+        multi_model_init._update_sigma_sq(given_variance)
 
         for model in multi_model_init.models:
             assert np.allclose(model.sigma_sq, sigma_sq_updated)
@@ -313,3 +314,10 @@ class TestGivenParametersMultimodalCorrNMF:
 
         for model in multi_model.models:
             assert np.allclose(given_sample_embeddings, model.U)
+
+    def test_given_variance(self, multi_model, counts):
+        given_variance = 3
+        multi_model.fit(counts, given_variance=given_variance)
+
+        for model in multi_model.models:
+            assert np.allclose(given_variance, model.sigma_sq)
