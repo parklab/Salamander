@@ -197,24 +197,6 @@ class CorrNMF(SignatureNMF):
         return exposures
 
     @property
-    def _n_parameters(self):
-        """
-        There are n_features * n_signatures parameters corresponding to
-        the signature matrix, each embedding corresponds to dim_embeddings parameters,
-        and each signature & sample has a real valued bias.
-        Finally, the model variance is a single positive real number.
-        """
-        n_parameters_signatures = self.n_features * self.n_signatures
-        n_parameters_embeddings = self.dim_embeddings * (
-            self.n_signatures + self.n_samples
-        )
-        n_parameters_biases = self.n_samples + self.n_signatures
-        n_parameters_exposures = n_parameters_embeddings + n_parameters_biases
-        n_parameters = n_parameters_signatures + n_parameters_exposures + 1
-
-        return n_parameters
-
-    @property
     def reconstruction_error(self):
         return kl_divergence(self.X, self.W, self.exposures.values)
 
@@ -281,6 +263,24 @@ class CorrNMF(SignatureNMF):
 
     def loglikelihood(self):
         return self.objective_function()
+
+    @property
+    def _n_parameters(self):
+        """
+        There are n_features * n_signatures parameters corresponding to
+        the signature matrix, each embedding corresponds to dim_embeddings parameters,
+        and each signature & sample has a real valued bias.
+        Finally, the model variance is a single positive real number.
+        """
+        n_parameters_signatures = self.n_features * self.n_signatures
+        n_parameters_embeddings = self.dim_embeddings * (
+            self.n_signatures + self.n_samples
+        )
+        n_parameters_biases = self.n_samples + self.n_signatures
+        n_parameters_exposures = n_parameters_embeddings + n_parameters_biases
+        n_parameters = n_parameters_signatures + n_parameters_exposures + 1
+
+        return n_parameters
 
     @abstractmethod
     def _update_alpha(self):
