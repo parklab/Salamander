@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 ---
 
+## 0.3.2 - 2024-01
+### Fixed
+  - Support fixing the model variance of (multimodal) CorrNMF models during training
+
 ## 0.3.1 - 2023-12
 ### Fixed
   - Improve signature, history and embedding plots
@@ -16,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
   - Support a sample-weigted KL-divergence loss in KL-NMF
   - Support a sample-weighted sparsity regularization in KL-NMF
-  - Support fixing signature and sample biases in (multimodal) CorrNMF during inference
+  - Support fixing signature and sample biases of (multimodal) CorrNMF models during training
 
 ## 0.2.1 - 2023-10
 ### Fixed
@@ -25,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 0.2.0 - 2023-10
 ### Added
-  - Support fixing arbitrary many a priori known signatures during inference
+  - Support fixing arbitrary many a priori known signatures during model training
   - Improved performance with just-in-time compiled update rules
 
 ## 0.1.0 - 2023-10
