@@ -16,11 +16,10 @@ EPSILON = np.finfo(np.float32).eps
 class CorrNMF(SignatureNMF):
     r"""
     The abstract class CorrNMF unifies the structure of deterministic and
-    stochastic correlated NMF (CorrNMF) with and without given signatures.
-    Both variants of CorrNMF have an identical generative model and objective function.
-    The model parameters are the sample biases \alpha, variance \sigma^2,
-    signature matrix W and the auxiliary parameters p.
-    The latent variables are the signature embeddings L and the sample embeddings U.
+    stochastic algorithms to fit the parameters of correlated NMF (CorrNMF).
+
+    The model parameters are the signature and sample biases, the variance, and the
+    signature matrix. The latent variables are the signature and sample embeddings.
 
     Overview:
 
@@ -48,12 +47,10 @@ class CorrNMF(SignatureNMF):
             update a single sample embedding u
 
         - fit:
-            Run CorrNMF for a given mutation count data. Every
-            fit method should also implement a version that allows fixing
-            arbitrary many a priori known signatures.
+            Run CorrNMF for a given mutation count data.
 
 
-    The following attributes are implemented in the abstract class CNMF:
+    The following attributes are implemented in CorrNMF:
 
         - signatures: pd.DataFrame
             The signature matrix including mutation type names and signature names
@@ -73,10 +70,7 @@ class CorrNMF(SignatureNMF):
             The number of parameters fitted in CorrNMF
 
         - objective: str
-            "minimize" or "maximize". Whether the NMF algorithm maximizes
-            or minimizes the objective function. Some algorithms maximize a likelihood,
-            others minimize a distance. The distinction is useful for filtering NMF
-            runs based on the fitted objective function value.
+            "minimize" or "maximize". CorrNMF maximizes the objective function.
 
         - corr_signatures: pd.DataFrame
             The signature correlation matrix induced by the signature embeddings
@@ -85,7 +79,7 @@ class CorrNMF(SignatureNMF):
             The sample correlation matrix induced by the sample embeddings
 
 
-    The following methods are implemented in the abstract class CorrNMF:
+    The following methods are implemented in CorrNMF:
 
         - objective_function:
             The evidence lower bound (ELBO) of the log-likelihood.
@@ -103,12 +97,12 @@ class CorrNMF(SignatureNMF):
             Initialize all model parameters and latent variables depending on the
             initialization method chosen
 
-        - _get_embedding_annotations:
-            A helper function to concatenate signature and sample names
+        - _get_embedding_data:
+            A helper function for the embedding plot that returns the signature
+            and sample embeddings
 
-        - plot_embeddings:
-            Plot signature or sample embeddings in 2D using PCA, tSNE or UMAP.
-            The respective plotting functions are implemented in the plot.py module
+        - _get_default_embedding_annotations:
+            A helper function for the embedding plot that returns the signature names
 
     More specific docstrings are written for the respective attributes and methods.
     """
@@ -203,26 +197,6 @@ class CorrNMF(SignatureNMF):
         return exposures
 
     @property
-    def _n_parameters(self):
-        """
-        There are n_features * n_signatures parameters corresponding to
-        the signature matrix, each embedding corresponds to dim_embeddings parameters,
-        and each signature & sample has a bias.
-        Finally, the model variance is a single positive real number.
-
-        Note: We do not include the number of auxiliary parameters p.
-        """
-        n_parameters_signatures = self.n_features * self.n_signatures
-        n_parameters_embeddings = self.dim_embeddings * (
-            self.n_signatures + self.n_samples
-        )
-        n_parameters_biases = self.n_samples + self.n_signatures
-        n_parameters_exposures = n_parameters_embeddings + n_parameters_biases
-        n_parameters = n_parameters_signatures + n_parameters_exposures + 1
-
-        return n_parameters
-
-    @property
     def reconstruction_error(self):
         return kl_divergence(self.X, self.W, self.exposures.values)
 
@@ -289,6 +263,24 @@ class CorrNMF(SignatureNMF):
 
     def loglikelihood(self):
         return self.objective_function()
+
+    @property
+    def _n_parameters(self):
+        """
+        There are n_features * n_signatures parameters corresponding to
+        the signature matrix, each embedding corresponds to dim_embeddings parameters,
+        and each signature & sample has a real valued bias.
+        Finally, the model variance is a single positive real number.
+        """
+        n_parameters_signatures = self.n_features * self.n_signatures
+        n_parameters_embeddings = self.dim_embeddings * (
+            self.n_signatures + self.n_samples
+        )
+        n_parameters_biases = self.n_samples + self.n_signatures
+        n_parameters_exposures = n_parameters_embeddings + n_parameters_biases
+        n_parameters = n_parameters_signatures + n_parameters_exposures + 1
+
+        return n_parameters
 
     @abstractmethod
     def _update_alpha(self):
@@ -363,6 +355,7 @@ class CorrNMF(SignatureNMF):
         given_signature_embeddings,
         given_sample_biases,
         given_sample_embeddings,
+        given_variance,
     ):
         if given_signatures is not None:
             self._check_given_signatures(given_signatures)
@@ -389,6 +382,11 @@ class CorrNMF(SignatureNMF):
                 given_sample_embeddings, self.n_samples, "given_sample_embeddings"
             )
 
+        if given_variance is not None:
+            type_checker("given_variance", given_variance, [float, int])
+            if given_variance <= 0.0:
+                raise ValueError("The variance has to be a positive real number.")
+
     def _initialize(
         self,
         given_signatures=None,
@@ -396,11 +394,12 @@ class CorrNMF(SignatureNMF):
         given_signature_embeddings=None,
         given_sample_biases=None,
         given_sample_embeddings=None,
+        given_variance=None,
         init_kwargs=None,
     ):
         """
         Initialize the signature matrix W, sample biases alpha, signature biases beta,
-        the squared variance, and the signature and sample embeddings.
+        the variance, and the signature and sample embeddings.
         The signatures or signature embeddings can also be provided by the user.
 
         Parameters
@@ -425,6 +424,9 @@ class CorrNMF(SignatureNMF):
         given_sample_embeddings : np.ndarray, default=None
             A priori known sample embeddings of shape (dim_embeddings, n_samples).
 
+        given_variance : float, default=None
+            A priori known model variance of the embeddings.
+
         init_kwargs : dict
             Any further keyword arguments to pass to the initialization method.
             This includes, for example, a possible 'seed' keyword argument
@@ -436,6 +438,7 @@ class CorrNMF(SignatureNMF):
             given_signature_embeddings,
             given_sample_biases,
             given_sample_embeddings,
+            given_variance,
         )
 
         if given_signatures is not None:
@@ -447,7 +450,11 @@ class CorrNMF(SignatureNMF):
         self.W, _, self.signature_names = initialize(
             self.X, self.n_signatures, self.init_method, given_signatures, **init_kwargs
         )
-        self.sigma_sq = 1.0
+
+        if given_variance is None:
+            self.sigma_sq = 1.0
+        else:
+            self.sigma_sq = float(given_variance)
 
         if given_signature_biases is None:
             self.beta = np.zeros(self.n_signatures)
@@ -457,7 +464,7 @@ class CorrNMF(SignatureNMF):
         if given_signature_embeddings is None:
             self.L = np.random.multivariate_normal(
                 np.zeros(self.dim_embeddings),
-                np.identity(self.dim_embeddings),
+                self.sigma_sq * np.identity(self.dim_embeddings),
                 size=self.n_signatures,
             ).T
         else:
@@ -471,7 +478,7 @@ class CorrNMF(SignatureNMF):
         if given_sample_embeddings is None:
             self.U = np.random.multivariate_normal(
                 np.zeros(self.dim_embeddings),
-                np.identity(self.dim_embeddings),
+                self.sigma_sq * np.identity(self.dim_embeddings),
                 size=self.n_samples,
             ).T
         else:

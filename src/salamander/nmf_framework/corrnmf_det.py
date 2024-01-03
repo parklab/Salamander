@@ -20,17 +20,16 @@ class CorrNMFDet(CorrNMF):
     "Bayesian Nonnegative Matrix Factorization with Stochastic Variational
     Inference" by Paisley et al.
 
-    The following methods are implemented to match the structure
-    of the abstract class CorrNMF:
+    The following methods are implemented to match the structure of CorrNMF:
 
         - _update_alpha:
-            update the sample exposure biases \alpha
+            update the sample biases \alpha
 
         - _update_beta:
             update the signature biases \beta
 
         - _update_sigma_sq:
-            update the variance \sigma^2 assumed in the generative model
+            update the variance \sigma^2
 
         - _update_W:
             update the signature matrix W
@@ -47,8 +46,7 @@ class CorrNMFDet(CorrNMF):
     The following method is implemented to match the structure of SignatureNMF:
 
         - fit:
-            Perform CorrNMF for the given mutation count data or
-            for given signatures and mutation count data
+            Inference of the CorrNMF parameters for a given mutation count data
     """
 
     def _update_alpha(self, given_sample_biases=None):
@@ -61,10 +59,11 @@ class CorrNMFDet(CorrNMF):
                 self.X, p, self.alpha, self.L, self.U
             )
 
-    def _update_sigma_sq(self):
-        embeddings = np.concatenate([self.L, self.U], axis=1)
-        self.sigma_sq = np.mean(embeddings**2)
-        self.sigma_sq = np.clip(self.sigma_sq, EPSILON, None)
+    def _update_sigma_sq(self, given_variance=None):
+        if given_variance is None:
+            embeddings = np.concatenate([self.L, self.U], axis=1)
+            self.sigma_sq = np.mean(embeddings**2)
+            self.sigma_sq = np.clip(self.sigma_sq, EPSILON, None)
 
     def _update_W(self):
         self.W = update_W(
@@ -193,6 +192,7 @@ class CorrNMFDet(CorrNMF):
         given_signature_embeddings=None,
         given_sample_biases=None,
         given_sample_embeddings=None,
+        given_variance=None,
         init_kwargs=None,
         history=False,
         verbose=0,
@@ -219,8 +219,11 @@ class CorrNMFDet(CorrNMF):
             Known sample biases of shape (n_samples,) that will be fixed
             during model fitting.
 
-        given_sample_embeddings: np.ndarray, default=None
+        given_sample_embeddings : np.ndarray, default=None
             Known sample embeddings that will be fixed during model fitting.
+
+        given_variance : float, default=None
+            Known model variance that will be fixed during model fitting.
 
         init_kwargs: dict
             Any further keywords arguments to be passed to the initialization method.
@@ -246,6 +249,7 @@ class CorrNMFDet(CorrNMF):
             given_signature_embeddings=given_signature_embeddings,
             given_sample_biases=given_sample_biases,
             given_sample_embeddings=given_sample_embeddings,
+            given_variance=given_variance,
             init_kwargs=init_kwargs,
         )
         of_values = [self.objective_function()]
@@ -262,7 +266,7 @@ class CorrNMFDet(CorrNMF):
             p = self._update_p()
             self._update_beta(p, given_signature_biases)
             self._update_LU(p, given_signature_embeddings, given_sample_embeddings)
-            self._update_sigma_sq()
+            self._update_sigma_sq(given_variance)
 
             if self.n_given_signatures < self.n_signatures:
                 self._update_W()

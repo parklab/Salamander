@@ -73,8 +73,11 @@ class SignatureNMF(ABC):
             fit method should also implement a version that allows fixing
             arbitrary many a priori known signatures.
 
-        - plot_embeddings:
-            Plot the sample (and potentially the signature) embeddings in 2D.
+        - _get_embedding_data:
+            A helper function for the embedding plot
+
+        - _get_default_embedding_annotations:
+            A helper function for the embedding plot
 
 
     The following attributes and methods are implemented in SignatureNMF:
@@ -90,9 +93,11 @@ class SignatureNMF(ABC):
         - bic: float
             The value of the Bayesian Information Criterion (BIC)
 
-        - _setup_parameters_fitting:
-            Perform parameter checks and add the input mutation counts matrix
-            as an attributes
+        - _setup_data_parameters:
+            Perform parameter checks on the input data and add attributes
+
+        - plot_history:
+            Plot the history of the objective function values after fitting the model
 
         - plot_signatures:
             Plot the signatures using the signatures_plot function implemented in
@@ -102,7 +107,9 @@ class SignatureNMF(ABC):
             Plot the correlation of either the signatures or exposures
             using the corr_plot function implemented in the plot module
 
-    More specific docstrings are written for the respective attributes and methods.
+        - plot_embeddings:
+            Plot the sample (and potentially the signature) embeddings in 2D
+            using PCA, tSNE or UMAP
     """
 
     def __init__(

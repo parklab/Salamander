@@ -69,7 +69,7 @@ class NMF(SignatureNMF):
             The exposure matrix including the signature names and sample names
 
         - _n_parameters:
-            The number of parameters fitted
+            The number of parameters of models with signature and exposure matrices
 
         - corr_signatures: pd.DataFrame
             The signature correlation matrix induced by their sample exposures
@@ -80,18 +80,17 @@ class NMF(SignatureNMF):
 
     The following methods are implemented in the abstract class NMF:
 
-        - initialize:
-            Initialize all model parameters and latent variables depending on the
-            initialization method chosen
+        - _initialize:
+            Initialize all model parameters
 
-        - _get_embedding_annotations:
-            A helper function to get the sample names for the embedding plots
+        - _get_embedding_data:
+            A helper function for the embedding plot. Models with signature and
+            exposure matrices use the exposures as the lower-dimensional
+            representation of the samples
 
-        - plot_embeddings:
-            Plot signature or sample embeddings in 2D using PCA, tSNE or UMAP.
-            The respective plotting functions are implemented in the plot.py module.
-
-    More details are explained in the respective attributes and methods.
+        - _get_default_embedding_annotations:
+            A helper function for the embedding plot. By default, no samples are
+            annotated
     """
 
     def __init__(

@@ -214,3 +214,8 @@ class TestGivenParametersCorrNMFDet:
         )
         model.fit(counts, given_sample_embeddings=given_sample_embeddings)
         assert np.allclose(given_sample_embeddings, model.U)
+
+    def test_given_variance(self, model, counts):
+        given_variance = 3
+        model.fit(counts, given_variance=given_variance)
+        assert np.allclose(given_variance, model.sigma_sq)
