@@ -3,12 +3,12 @@ import pandas as pd
 
 from ..utils import shape_checker, type_checker, value_checker
 from . import _utils_klnmf
-from .nmf import NMF
+from .standard_nmf import StandardNMF
 
 EPSILON = np.finfo(np.float32).eps
 
 
-class KLNMF(NMF):
+class KLNMF(StandardNMF):
     """
     Decompose a mutation count matrix X into the product of a signature
     matrix W and an exposure matrix H by minimizing the weighted

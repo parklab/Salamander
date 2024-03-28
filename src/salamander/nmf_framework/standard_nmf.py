@@ -10,13 +10,13 @@ from .signature_nmf import SignatureNMF
 EPSILON = np.finfo(np.float32).eps
 
 
-class NMF(SignatureNMF):
+class StandardNMF(SignatureNMF):
     """
-    The abstract class NMF unifies the structure of NMF algorithms
+    The abstract class StandardNMF unifies the structure of NMF algorithms
     with a single signature matrix W and exposure matrix H.
-    Examples of these algorithms include the standard NMF algorithm
+    Examples of these algorithms include the NMF algorithms from
     (Lee and Seung, 1999), minimum volume NMF (mvNMF) or NMF variants
-    with regularizations on the entries of W and H.
+    with regularizations on the entries of W or H.
     All of these NMF algorithms have the same parameters. Therefore,
     many properties of interest such as the signature correlation martrix
     or the sample embeddings are computed in the same manner.
