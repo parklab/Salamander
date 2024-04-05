@@ -53,13 +53,17 @@ def tsne(adata: AnnData, basis: str, **kwargs) -> None:
 
 
 def _umap(
-    data: np.ndarray, n_neighbors: float = 15, min_dist: float = 0.1, **kwargs
+    data: np.ndarray,
+    n_components: int = 2,
+    n_neighbors: float = 15,
+    min_dist: float = 0.1,
+    **kwargs,
 ) -> np.ndarray:
     import umap
 
     n_neighbors = min(n_neighbors, len(data) - 1.0)
     data_reduced_dim = umap.UMAP(
-        n_neighbors=n_neighbors, min_dist=min_dist, **kwargs
+        n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, **kwargs
     ).fit_transform(data)
 
     return data_reduced_dim
