@@ -1,20 +1,27 @@
-import warnings
+from __future__ import annotations
 
-import fastcluster
+import warnings
+from typing import TYPE_CHECKING, Any, Iterable
+
+import fastcluster  # type: ignore
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import umap
-from adjustText import adjust_text
+from adjustText import adjust_text  # type: ignore
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import pdist
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
 
 from .consts import COLORS_INDEL83, COLORS_SBS96, INDEL_TYPES_83, SBS_TYPES_96
-from .utils import match_to_catalog, value_checker
+from .utils import _get_basis_obsm, _get_basis_obsp, match_to_catalog, value_checker
+
+if TYPE_CHECKING:
+    from anndata import AnnData
+    from matplotlib.axes import Axes
+    from matplotlib.colors import Colormap
+    from matplotlib.typing import ColorType
+    from seaborn.matrix import ClusterGrid
 
 
 def set_salamander_style():
@@ -22,22 +29,28 @@ def set_salamander_style():
     sns.set_style("ticks")
     params = {
         "axes.edgecolor": "black",
-        "axes.labelsize": 14,
+        "axes.labelsize": "medium",
         "axes.spines.top": False,
         "axes.spines.right": False,
-        "axes.titlesize": 16,
+        "axes.titlesize": "large",
         "errorbar.capsize": 3,
         "font.family": "DejaVu Sans",
-        "legend.fontsize": 12,
+        "legend.fontsize": "medium",
         "lines.markersize": 8,
         "pdf.fonttype": 42,
-        "xtick.labelsize": 12,
-        "ytick.labelsize": 12,
+        "xtick.labelsize": "small",
+        "ytick.labelsize": "small",
     }
     mpl.rcParams.update(params)
 
 
-def history_plot(values, conv_test_freq, min_iteration=0, ax=None, **kwargs):
+def history_plot(
+    values: np.ndarray,
+    conv_test_freq: int,
+    min_iteration: int = 0,
+    ax: Axes | None = None,
+    **kwargs,
+) -> Axes:
     n_values = len(values)
     ns_iteration = np.arange(
         conv_test_freq, n_values * conv_test_freq + 1, conv_test_freq
@@ -62,14 +75,13 @@ def history_plot(values, conv_test_freq, min_iteration=0, ax=None, **kwargs):
 
 
 def _annotate_plot(
-    ax,
-    data,
-    annotations,
-    ha="left",
-    fontsize="medium",
-    color="black",
-    adjust_annotations=True,
-    adjust_kwargs=None,
+    ax: Axes,
+    data: np.ndarray,
+    annotations: Iterable[str],
+    fontsize: float | str = "small",
+    color: ColorType = "black",
+    adjust_annotations: bool = True,
+    adjust_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ):
     for data_point, annotation in zip(data, annotations):
@@ -77,40 +89,47 @@ def _annotate_plot(
             data_point[0],
             data_point[1],
             annotation,
-            ha=ha,
             fontsize=fontsize,
             color=color,
             **kwargs,
         )
     if adjust_annotations:
-        if adjust_kwargs is None:
-            adjust_kwargs = {} if adjust_kwargs is None else adjust_kwargs.copy()
-
-        annotations = [
+        adjust_kwargs = {} if adjust_kwargs is None else adjust_kwargs.copy()
+        texts = [
             child for child in ax.get_children() if isinstance(child, mpl.text.Text)
         ]
-        annotations = [
-            annotation for annotation in annotations if annotation.get_text()
-        ]
-        adjust_text(annotations, **adjust_kwargs)
+        texts_nonempty = [annotation for annotation in texts if annotation.get_text()]
+        adjust_text(texts_nonempty, **adjust_kwargs)
 
 
-def _scatter_1d(data: np.ndarray, ax=None, **kwargs):
+def _scatter_1d(
+    data: np.ndarray, xlabel: str | None = None, ax: Axes | None = None, **kwargs
+) -> Axes:
     if data.ndim != 1:
         raise ValueError(f"The datapoints of {data} (rows) have to be one-dimensional.")
 
     if ax is None:
-        _, ax = plt.subplots(figsize=(6, 1))
+        _, ax = plt.subplots(figsize=(4, 1))
 
     ax.spines[["left", "bottom"]].set_visible(False)
     ax.get_yaxis().set_visible(False)
     ax.axhline(y=0, color="black", zorder=1)
-    data_2d = np.vstack([data, np.zeros_like(data)]).T
-    sns.scatterplot(x=data_2d[:, 0], y=data_2d[:, 1], ax=ax, zorder=2, **kwargs)
-    return data_2d, ax
+    sns.scatterplot(x=data, y=np.zeros_like(data), ax=ax, zorder=2, **kwargs)
+
+    if xlabel:
+        ax.set_xlabel(xlabel)
+
+    return ax
 
 
-def _scatter_2d(data, ax=None, **kwargs):
+def _scatter_2d(
+    data: np.ndarray,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    ticks: bool = True,
+    ax: Axes | None = None,
+    **kwargs,
+) -> Axes:
     """
     The rows (!) of 'data' are assumed to be the data points.
     """
@@ -118,140 +137,44 @@ def _scatter_2d(data, ax=None, **kwargs):
         raise ValueError(f"The datapoints of {data} (rows) have to be two-dimensional.")
 
     if ax is None:
-        _, ax = plt.subplots(figsize=(6, 6))
+        _, ax = plt.subplots(figsize=(4, 4))
 
-    ax.set(xlabel="x", ylabel="y")
     sns.scatterplot(x=data[:, 0], y=data[:, 1], ax=ax, **kwargs)
-    return data, ax
+
+    if xlabel:
+        ax.set_xlabel(xlabel)
+
+    if ylabel:
+        ax.set_ylabel(ylabel)
+
+    if not ticks:
+        ax.set(xticks=[], yticks=[])
+
+    return ax
 
 
-def _pca_2d(data, ax=None, **kwargs):
-    """
-    The rows (!) of 'data' are assumed to be the data points.
-    """
-    if ax is None:
-        _, ax = plt.subplots(figsize=(6, 6))
-
-    data_2d = PCA(n_components=2).fit_transform(data)
-    ax.set(xlabel="PC1", ylabel="PC2")
-    sns.scatterplot(x=data_2d[:, 0], y=data_2d[:, 1], ax=ax, **kwargs)
-    return data_2d, ax
-
-
-def _tsne_2d(data, perplexity=30, ax=None, **kwargs):
-    """
-    The rows (!) of 'data' are assumed to be the single data points.
-    """
-    if ax is None:
-        _, ax = plt.subplots(figsize=(6, 6))
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        perplexity = min(perplexity, len(data) - 1)
-        data_2d = TSNE(perplexity=perplexity).fit_transform(data)
-
-    ax.set(xlabel="t-SNE1", xticks=[], ylabel="t-SNE2", yticks=[])
-    sns.scatterplot(x=data_2d[:, 0], y=data_2d[:, 1], ax=ax, **kwargs)
-    return data_2d, ax
-
-
-def _umap_2d(data, n_neighbors=15, min_dist=0.1, ax=None, **kwargs):
-    """
-    The rows (!) of 'data' are assumed to be the single data points.
-    """
-    if ax is None:
-        _, ax = plt.subplots(figsize=(6, 6))
-
-    n_neighbors = min(n_neighbors, len(data) - 1)
-    data_2d = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist).fit_transform(data)
-
-    ax.set(xlabel="UMAP1", xticks=[], ylabel="UMAP2", yticks=[])
-    sns.scatterplot(x=data_2d[:, 0], y=data_2d[:, 1], ax=ax, **kwargs)
-    return data_2d, ax
-
-
-def embeddings_plot(
+def _scatter(
     data: np.ndarray,
-    method="umap",
-    normalize=False,
-    annotations=None,
-    annotation_kwargs=None,
-    adjust_annotations=True,
-    adjust_kwargs=None,
-    ax=None,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    ticks: bool = True,
+    annotations: Iterable[str] | None = None,
+    annotation_kwargs: dict[str, Any] | None = None,
+    adjust_annotations: bool = True,
+    adjust_kwargs: dict[str, Any] | None = None,
+    ax: Axes | None = None,
     **kwargs,
-):
-    """
-    Plot a dimensionality reduction of high-dimensional data.
-    If the dimension of the data is one or two, it is plotted
-    directly, ignoring the chosen method.
-
-    Parameters
-    ----------
-    data : np.ndarray
-        The rows (!) are assumed to be the data points.
-
-    method : str, default='umap'
-        Either 'tsne', 'pca' or 'umap'. The respective dimensionality reduction
-        is applied to plot the data in 2D. If the dimensionality of the data is
-        less or equal to two, the points are plotted directly.
-
-    normalize : bool, default=False
-        If True, the data points are normalized to have a Euclidean norm of
-        one before applying the dimensionality reduction.
-
-    annotations : list[str], default=None
-        Annotations of the projected data points. The length of the list has to match
-        the number of data points.
-
-    annotation_kwargs : dict, default=None
-        keyword arguments to pass to matplotlibs plt.txt()
-
-    adjust_annotations : bool, default=True
-        If True, the annotations are adjusted to prevent them from overlapping.
-
-    adjust_kwargs : dict, default=None
-        keyword arguments to pass to adjustText's adjust_text.
-        This is for example useful when arrows connecting the projected
-        data points and the adjusted positions of the annotations
-        should be added.
-
-    ax : matplotlib.axes.Axes, default=None
-        Pre-existing axes for the plot. Otherwise, an axes is created.
-
-    **kwargs :
-        keyword arguments to pass to seaborn's scatterplot
-
-    Returns
-    -------
-    ax : matplotlib.axes.Axes
-        The matplotlib axes containing the plot.
-    """
-    value_checker("method", method, ["pca", "tsne", "umap"])
-
-    if normalize:
-        data /= np.sqrt(np.sum(data**2, axis=1))[:, np.newaxis]
-
-    n_dimensions = data.shape[1]
-
-    if n_dimensions in [1, 2]:
-        warnings.warn(
-            f"The dimension of the data points is {n_dimensions}. "
-            f"The method argument '{method}' will be ignored "
-            "and the embeddings are plotted directly.",
-            UserWarning,
-        )
-
-    if n_dimensions == 1:
-        data_2d, ax = _scatter_1d(data[:, 0], ax=ax, **kwargs)
-    elif n_dimensions == 2:
-        data_2d, ax = _scatter_2d(data, ax=ax, **kwargs)
-    elif method == "tsne":
-        data_2d, ax = _tsne_2d(data, ax=ax, **kwargs)
-    elif method == "pca":
-        data_2d, ax = _pca_2d(data, ax=ax, **kwargs)
+) -> Axes:
+    if data.ndim == 1 or data.shape[1] == 1:
+        ax = _scatter_1d(data, xlabel, ax, **kwargs)
+        data_2d = np.vstack([data.flatten(), np.zeros_like(data.flatten())]).T
+    elif data.ndim == 2 and data.shape[1] == 2:
+        ax = _scatter_2d(data, xlabel, ylabel, ticks, ax, **kwargs)
+        data_2d = data
     else:
-        data_2d, ax = _umap_2d(data, ax=ax, **kwargs)
+        raise ValueError(
+            "Scatterplots are only supported for one- or two-dimensional data."
+        )
 
     if annotations is not None:
         annotation_kwargs = (
@@ -265,13 +188,77 @@ def embeddings_plot(
             adjust_kwargs=adjust_kwargs,
             **annotation_kwargs,
         )
-
     return ax
 
 
-def corr_plot(
-    corr: pd.DataFrame, figsize=(6, 6), cmap="vlag", annot=True, fmt=".2f", **kwargs
-):
+def scatter(adata: AnnData, x: str, y: str | None = None, **kwargs) -> Axes:
+    if y is None:
+        data = adata.obs(x).to_numpy()
+    else:
+        data = adata.obs[[x, y]].to_numpy()
+
+    ax = _scatter(data, xlabel=x, ylabel=y, **kwargs)
+    return ax
+
+
+def _basisobsm2name(basis: str) -> str:
+    name = (
+        "PC"
+        if basis == "pca"
+        else "tSNE"
+        if basis == "tsne"
+        else "UMAP"
+        if basis == "umap"
+        else basis
+    )
+    return name
+
+
+def embedding(
+    adata: AnnData,
+    basis: str,
+    dimensions: tuple[int, int] = (0, 1),
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    **kwargs,
+) -> Axes:
+    data = _get_basis_obsm(adata, basis)
+
+    if data.ndim == 2 and data.shape[1] > 2:
+        data = data[dimensions]
+
+    name = _basisobsm2name(basis)
+    labels = [f"{name}{d+1}" for d in dimensions]
+
+    if xlabel is None:
+        xlabel = labels[0]
+
+    if ylabel is None:
+        ylabel = labels[1]
+
+    ax = _scatter(data, xlabel=xlabel, ylabel=ylabel, **kwargs)
+    return ax
+
+
+def pca(adata: AnnData, **kwargs) -> Axes:
+    return embedding(adata, basis="pca", **kwargs)
+
+
+def tsne(adata: AnnData, **kwargs) -> Axes:
+    return embedding(adata, basis="tsne", ticks=False, **kwargs)
+
+
+def umap(adata: AnnData, **kwargs) -> Axes:
+    return embedding(adata, basis="umap", ticks=False, **kwargs)
+
+
+def _correlation(
+    corr: pd.DataFrame,
+    figsize: tuple[float, float] = (4.0, 4.0),
+    cmap: Colormap | str | None = "vlag",
+    fmt: str = ".2f",
+    **kwargs,
+) -> ClusterGrid:
     linkage = hierarchy.linkage(corr)
     clustergrid = sns.clustermap(
         corr,
@@ -280,25 +267,32 @@ def corr_plot(
         vmin=-1,
         vmax=1,
         cmap=cmap,
-        annot=annot,
         fmt=fmt,
         **kwargs,
     )
-
     return clustergrid
 
 
-def _get_colors_signature_plot(mutation_types, colors=None):
+def correlation(adata: AnnData, **kwargs) -> ClusterGrid:
+    corr = pd.DataFrame(
+        _get_basis_obsp(adata, "correlation"),
+        index=adata.obs_names,
+        columns=adata.obs_names,
+    )
+    return _correlation(corr, **kwargs)
+
+
+def _get_colors_barplot(var_names, colors=None):
     """
-    Given the mutation types and the colors argument of sigplot_bar, return the
-    final colors used in the signature bar chart.
+    Given the variable names / features and the colors argument of barplot,
+    return the final colors used in the bar chart.
     """
-    n_features = len(mutation_types)
+    n_vars = len(var_names)
 
     if colors == "SBS96" or (
-        n_features == 96 and all(mutation_types == SBS_TYPES_96) and colors is None
+        n_vars == 96 and all(var_names == SBS_TYPES_96) and colors is None
     ):
-        if n_features != 96:
+        if n_vars != 96:
             raise ValueError(
                 "The standard SBS colors can only be used "
                 "when the signatures have 96 features."
@@ -306,9 +300,9 @@ def _get_colors_signature_plot(mutation_types, colors=None):
         colors = COLORS_SBS96
 
     elif colors == "Indel83" or (
-        n_features == 83 and all(mutation_types == INDEL_TYPES_83) and colors is None
+        n_vars == 83 and all(var_names == INDEL_TYPES_83) and colors is None
     ):
-        if n_features != 83:
+        if n_vars != 83:
             raise ValueError(
                 "The standard Indel colors can only be used "
                 "when the signatures have 83 features."
@@ -316,38 +310,48 @@ def _get_colors_signature_plot(mutation_types, colors=None):
         colors = COLORS_INDEL83
 
     elif type(colors) in [str, tuple]:
-        colors = n_features * [colors]
+        colors = n_vars * [colors]
 
     elif type(colors) is list:
-        if len(colors) != n_features:
-            raise ValueError(
-                f"The list of colors must be of length n_features={n_features}."
-            )
+        if len(colors) != n_vars:
+            raise ValueError(f"The list of colors must be of length n_vars={n_vars}.")
 
     else:
-        colors = n_features * ["gray"]
+        colors = n_vars * ["gray"]
 
     return colors
 
 
-def _signature_plot(
-    signature, colors=None, annotate_mutation_types=False, ax=None, **kwargs
-):
+def _barplot_single(
+    data: pd.DataFrame,
+    colors: ColorType | list[ColorType] | None = None,
+    annotate_vars: bool = False,
+    ax: Axes | None = None,
+    **kwargs,
+) -> Axes:
     """
+    Plot the relative values of a non-negative dataframe
+    with a single row.
+
     Inputs:
     -------
-    signature: pd.Signature
-        Signature with mutation types and name.
+    data: pd.DataFrame
+        A dataframe with only one row, typically a single signature
+        or the feature counts of a single sample.
+        The columns of data are expected to be the names of the features.
 
-    colors: str, tuple or list
+    colors:
         Can be set to 'SBS96' or 'Indel83' to use the standard bar colors
-        for these mutation types.
-        Otherwise, when a single string or tuple is provided,
-        all bars will have the same color. Alternatively,
-        a list can be used to specifiy the color of each bar individually.
+        for these features.
+        Otherwise, when a single color is provided, all bars will have
+        the same color. Alternatively, a list can be used to specifiy
+        the color of each bar individually.
+
+    annotate_vars: bool, default=False
+        If True, the x-axis has ticks and annotations.
 
     ax:
-        A single matplotlib Axes in which to draw the plot.
+        Axes object to draw the plot onto. Otherwise, create an Axes internally.
 
     kwargs: dict
         Any keyword arguments to be passed to matplotlibs ax.bar
@@ -355,267 +359,298 @@ def _signature_plot(
     if ax is None:
         _, ax = plt.subplots(figsize=(4, 1))
 
-    signature_normalized = signature / signature.sum(axis=0)
-    mutation_types = signature.index
-    colors = _get_colors_signature_plot(mutation_types, colors)
+    data_normalized = data.div(data.sum(axis=1), axis=0)
+    var_names = data.columns
+    colors = _get_colors_barplot(var_names, colors)
 
-    ax.set_title(signature_normalized.columns[0])
+    ax.set_title(data.index[0])
     ax.spines["left"].set_visible(False)
     ax.get_yaxis().set_visible(False)
-    ax.set_xlim((-1, len(mutation_types)))
+    ax.set_xlim((-1, len(var_names)))
 
     ax.bar(
-        mutation_types,
-        signature_normalized.iloc[:, 0],
+        var_names,
+        data_normalized.iloc[0, :],
         linewidth=0,
         color=colors,
         **kwargs,
     )
 
-    if annotate_mutation_types:
-        ax.set_xticks(mutation_types)
+    if annotate_vars:
+        ax.set_xticks(var_names)
         ax.set_xticklabels(
-            mutation_types, family="monospace", fontsize=4, ha="center", rotation=90
+            var_names, family="monospace", fontsize="x-small", ha="center", rotation=90
         )
-
     else:
         ax.set_xticks([])
 
     return ax
 
 
-def signature_plot(
-    signature,
-    catalog=None,
-    colors=None,
-    annotate_mutation_types=False,
-    ax=None,
+def _barplot_matched(
+    data: pd.DataFrame,
+    catalog: pd.DataFrame | None = None,
+    colors: ColorType | list[ColorType] | None = None,
+    annotate_vars: bool = False,
+    ax: Axes | Iterable[Axes] | None = None,
     **kwargs,
-):
+) -> Axes | Iterable[Axes]:
     """
+    Plot the relative values of a non-negative dataframe
+    with a single row.
+    The closest matching row from a 'catalog' can also be plotted.
+
     Inputs:
     -------
-    signature: pd.Signature
-        Signature with mutation types and name.
+    data: pd.DataFrame
+        A dataframe with only one row, typically a single mutational
+        signature.
 
     catalog: pd.DataFrame
-        If a catalog is provided, the single best matching catalog signature
-        will also be plotted.
+        If a catalog with matching features is provided, the single best
+        matching row will also be plotted.
 
     colors: str, tuple or list
         Can be set to 'SBS96' or 'Indel83' to use the standard bar colors
-        for these mutation types.
-        Otherwise, when a single string or tuple is provided,
-        all bars will have the same color. Alternatively,
-        a list can be used to specifiy the color of each bar individually.
+        for these features.
+        Otherwise, when a single color is provided, all bars will have
+        the same color. Alternatively, a list can be used to specifiy
+        the color of each bar individually.
+
+    annotate_vars: bool, default=False
+        If True, the x-axis has ticks and annotations.
 
     ax:
-        Axes in which to draw the plot. A single Axes if catalog is None;
+        Axes object(s) to draw the plot onto. A single Axes if catalog is None;
         two Axes if a catalog is given.
 
     kwargs: dict
         Any keyword arguments to be passed to matplotlibs ax.bar
     """
     if catalog is None:
-        if ax is None:
-            _, ax = plt.subplots(figsize=(4, 1))
+        assert isinstance(ax, Axes) or ax is None
+        return _barplot_single(
+            data, colors=colors, annotate_vars=annotate_vars, ax=ax, **kwargs
+        )
 
-        signatures = [signature]
-        axes = [ax]
-
+    if ax is None:
+        _, axes = plt.subplots(1, 2, figsize=(8, 1))
     else:
-        if ax is None:
-            _, ax = plt.subplots(1, 2, figsize=(8, 1))
-
-        matched_signature = match_to_catalog(signature, catalog, metric="cosine")
-        signatures = [signature, matched_signature]
         axes = ax
 
-    for sig, axis in zip(signatures, axes):
-        _signature_plot(
-            sig,
+    matched_data = match_to_catalog(data, catalog, metric="cosine")
+    data_all = [data, matched_data]
+
+    for d, axis in zip(data_all, axes):
+        _barplot_single(
+            d,
             colors=colors,
-            annotate_mutation_types=annotate_mutation_types,
+            annotate_vars=annotate_vars,
             ax=axis,
             **kwargs,
         )
 
-    if catalog is None:
-        return axes[0]
-
     return axes
 
 
-def signatures_plot(
-    signatures,
-    catalog=None,
-    colors=None,
-    annotate_mutation_types=False,
-    axes=None,
+def _barplot(
+    data: pd.DataFrame,
+    catalog: pd.DataFrame | None = None,
+    colors: ColorType | list[ColorType] | None = None,
+    annotate_vars: bool = False,
+    axes: Axes | Iterable[Axes] | None = None,
     **kwargs,
-):
+) -> Axes | Iterable[Axes]:
     """
+    Plot the relative values of the rows of a non-negative dataframe.
+    The closest matching rows from a 'catalog' can also be plotted.
+
     Inputs:
     -------
-    signatures : pd.DataFrame
-        Named signatures of shape (n_features, n_signatures)
+    data : pd.DataFrame
+        Annotated dataframe of shape (n_obs, n_vars), typically
+        a collection of mutational signatures.
 
     catalog: pd.DataFrame
-        If a catalog is provided, the best matching catalog signatures
-        will also be plotted.
+        If a catalog with matching features is provided, the best matching
+        rows of the catalog are also plotted.
 
-    axes : list
-        Axes in which to draw the plot. Multiple Axes if more than one signature
-        is provided or a catalog is given. Otherwise a single axis.
-        When a catalog is provided, axes is expected to be of shape (n_signatures, 2).
+    colors: str, tuple or list
+        Can be set to 'SBS96' or 'Indel83' to use the standard bar colors
+        for these features.
+        Otherwise, when a single color is provided, all bars will have
+        the same color. Alternatively, a list can be used to specifiy
+        the color of each bar individually.
+
+    annotate_vars: bool, default=False
+        If True, the x-axis has ticks and annotations.
+
+    axes : Axes | list[Axes]
+        Axes object(s) to draw the plot onto. Multiple Axes if 'data' has more than
+        one column or a catalog is given. Otherwise a single Axes.
+        When a catalog is provided, axes is expected to be of shape (n_obs, 2).
     """
-    n_signatures = signatures.shape[1]
+    n_obs = data.shape[0]
 
-    if n_signatures == 1:
-        ax = signature_plot(
-            signatures,
+    if n_obs == 1:
+        return _barplot_matched(
+            data,
             catalog=catalog,
             colors=colors,
-            annotate_mutation_types=annotate_mutation_types,
+            annotate_vars=annotate_vars,
             ax=axes,
             **kwargs,
         )
-        return ax
 
     if axes is None:
         if catalog is None:
-            _, axes = plt.subplots(n_signatures, 1, figsize=(4, n_signatures))
+            _, axes = plt.subplots(n_obs, 1, figsize=(4, n_obs))
         else:
-            _, axes = plt.subplots(n_signatures, 2, figsize=(8, n_signatures))
+            _, axes = plt.subplots(n_obs, 2, figsize=(8, n_obs))
 
-    for ax, signature in zip(axes, signatures):
-        signature_plot(
-            signatures[[signature]],
+    assert isinstance(
+        axes, Iterable
+    ), "Adding multiple barplots to custom 'axes' requires 'axes' to be iterable."
+
+    for ax, row in zip(axes, data.T):
+        _barplot_matched(
+            data.loc[[row], :],
             catalog=catalog,
             colors=colors,
-            annotate_mutation_types=annotate_mutation_types,
+            annotate_vars=annotate_vars,
             ax=ax,
             **kwargs,
         )
-    plt.tight_layout()
 
+    plt.tight_layout()
     return axes
 
 
-def _get_sample_order(exposures: pd.DataFrame, normalize=True):
+def barplot(adata: AnnData, **kwargs):
+    return _barplot(adata.to_df(), **kwargs)
+
+
+def _get_obs_order(data: pd.DataFrame, normalize: bool = True) -> np.ndarray:
     """
-    Compute the aesthetically most pleasing order of the samples
-    for a stacked bar chart of the exposures.
+    Compute the aesthetically most pleasing order of the observations
+    of a non-negative data array of shape (n_obs, n_dimensions) for a
+    stacked barchart using hierarchical clustering.
 
     Parameters
     ----------
-    exposures : pd.DataFrame of shape (n_signatures, n_samples)
-        The named exposure matrix
+    data : pd.DataFrame of shape (n_obs, n_dimensions)
+        An annotated non-negative data matrix, typically the signature
+        exposures.
 
     normalize : bool, default=True
-        If True, the exposures are normalized before computing the
-        hierarchical clustering.
+        If True, the data is row-normalized before computing the
+        optimal order.
 
     Returns
     -------
-    sample_order : np.ndarray
-        The ordered sample names
+    order : np.ndarray
+        The ordered observations.
     """
     if normalize:
-        # not in-place
-        exposures = exposures / exposures.sum(axis=0)
+        # no in-place
+        data = data.div(data.sum(axis=1), axis=0)
 
-    d = pdist(exposures.T)
+    d = pdist(data)
     linkage = fastcluster.linkage(d)
-    # get the optimal sample order that is consistent
+    # get the optimal order that is consistent
     # with the hierarchical clustering linkage
-    sample_order = hierarchy.leaves_list(hierarchy.optimal_leaf_ordering(linkage, d))
-    sample_order = exposures.columns[sample_order].to_numpy()
-    return sample_order
+    obs_order = hierarchy.leaves_list(hierarchy.optimal_leaf_ordering(linkage, d))
+    obs_order = data.index[obs_order].to_numpy()
+    return obs_order
 
 
-def _reorder_exposures(
-    exposures: pd.DataFrame, sample_order=None, reorder_signatures=True
-):
+def _reorder_data(
+    data: pd.DataFrame,
+    obs_order: np.ndarray | None = None,
+    normalize: bool = True,
+    reorder_dimensions: bool = True,
+) -> pd.DataFrame:
     """
-    Reorder the samples with hierarchical clustering and
-    reorder the signatures by their total relative exposure.
+    Reorder non-negative data using hierarchical clustering and optionally
+    reorder the dimensions by their total relative sums.
 
     Parameters
     ----------
-    exposures : pd.DataFrame of shape (n_signatures, n_samples)
-        The named exposure matrix
+    data : pd.DataFrame of shape (n_obs, n_dimensions)
+        An annotated non-negative data matrix, typically the signature
+        exposures.
 
-    sample_order : np.ndarray, default=None
-        A predefined order of the samples as a list of sample names.
-        If None, hierarchical clustering is used to compute the
-        aesthetically most pleasing order.
+    obs_order : np.ndarray, default=None
+        An optional predefined order of the observations.
 
-    reorder_signatures : bool, default=True
-        If True, the signatures will be reordered such that the
-        total relative exposures of the signatures decrease from the bottom
-        to the top signature in the stacked bar chart.
+    normalize : bool, default=True
+        If True, the data is row-normalized before computing the
+        optimal order. Only used if 'data_order' is not given.
+
+    reorder_dimensions : bool, default=True
+        If True, the dimensions/columns will be reordered such that their
+        total relative sums decrease from the left to the right.
 
     Returns
     -------
-    exposures_reordered : pd.DataFrame of shape (n_signatures, n_samples)
-        The reorderd named exposure matrix
+    data_reordered : pd.DataFrame of shape (n_obs, n_dimensions)
+        The reorderd annotated data.
     """
-    if sample_order is None:
-        sample_order = _get_sample_order(exposures)
+    if obs_order is None:
+        obs_order = _get_obs_order(data, normalize=normalize)
 
-    exposures_reordered = exposures[sample_order]
+    data_reordered = data.loc[obs_order, :]
 
-    # order the signatures by their total relative exposure
-    if reorder_signatures:
-        exposures_normalized = exposures_reordered / exposures_reordered.sum(axis=0)
-        signature_order = (
-            exposures_normalized.sum(axis=1).sort_values(ascending=False).index
-        )
-        exposures_reordered = exposures_reordered.reindex(signature_order)
+    # order the columns by their total relative contribution
+    if reorder_dimensions:
+        data_normalized = data.div(data.sum(axis=1), axis=0)
+        dim_ordered = data_normalized.sum(axis=0).sort_values(ascending=False).index
+        data_reordered = data_reordered[dim_ordered]
 
-    return exposures_reordered
+    return data_reordered
 
 
-def exposures_plot(
-    exposures: pd.DataFrame,
-    sample_order=None,
-    reorder_signatures=True,
-    annotate_samples=True,
-    colors=None,
-    ncol_legend=1,
-    ax=None,
+def stacked_barplot(
+    data: pd.DataFrame,
+    obs_order: np.ndarray | None = None,
+    reorder_dimensions: bool = True,
+    annotate_obs: bool = True,
+    colors: Iterable[ColorType] | None = None,
+    title: str | None = None,
+    ncol_legend: int = 1,
+    ax: Axes | None = None,
     **kwargs,
-):
+) -> Axes:
     """
-    Visualize the exposures with a stacked bar chart.
+    Visualize non-negative data with a stacked bar chart, typically
+    the signature exposures.
 
     Parameter
     ---------
-    exposures : pd.DataFrame of shape (n_signatures, n_samples)
-        The named exposure matrix.
+    data : pd.DataFrame of shape (n_obs, n_dimensions)
+        An annotated non-negative data matrix, typically the signature
+        exposures.
 
-    sample_order : np.ndarray, default=None
-        A predefined order of the samples as a list of sample names.
+    obs_order : np.ndarray, default=None
+        An optional predefined order of the observations.
         If None, hierarchical clustering is used to compute the
         aesthetically most pleasing order.
 
-    reorder_signatures : bool, default=True
-        If True, the signatures will be reordered such that the
-        total relative exposures of the signatures decrease from the bottom
-        to the top signature in the stacked bar chart.
+    reorder_dimensions : bool, default=True
+        If True, the columns of 'data' will be reordered such that their
+        total relative contributions in the stacked bar chart is increasing.
 
-    annotate_samples : bool, default=True
-        If True, the x-axis is annotated with the sample names.
+    annotate_obs : bool, default=True
+        If True, the x-axis is annotated with the observation names.
 
-    colors : list of length n_signatures, default=None
-        Colors to pass to matplotlibs ax.bar, one per signature.
+    colors : iterable of length n_dimensions, default=None
+        Colors to pass to matplotlibs ax.bar, one per dimension.
 
     n_col_legend : int, default=1
         The number of columns of the legend.
 
     ax : matplotlib.axes.Axes, default=None
-        Pre-existing axes for the plot. Otherwise, create an axis internally.
+        Axes object to draw the plot onto. Otherwise, create an Axes internally.
 
     kwargs : dict
         Any keyword arguments to be passed to matplotlibs ax.bar.
@@ -625,43 +660,43 @@ def exposures_plot(
     ax : matplotlib.axes.Axes
         The matplotlib axes containing the plot.
     """
-    n_signatures, n_samples = exposures.shape
-    # not in-place
-    exposures = exposures / exposures.sum(axis=0)
-    exposures = _reorder_exposures(
-        exposures, sample_order=sample_order, reorder_signatures=reorder_signatures
+    n_obs, n_dimensions = data.shape
+    data = data.div(data.sum(axis=1), axis=0)
+    data = _reorder_data(
+        data, obs_order=obs_order, reorder_dimensions=reorder_dimensions
     )
 
     if ax is None:
-        _, ax = plt.subplots(figsize=(0.3 * n_samples, 4))
+        _, ax = plt.subplots(figsize=(0.3 * n_obs, 4))
 
     if colors is None:
-        colors = list(sns.color_palette("deep")) * (1 + n_signatures // 10)
+        colors = sns.color_palette("deep") * (1 + n_dimensions // 10)
 
-    bottom = np.zeros(n_samples)
+    bottom = np.zeros(n_obs)
 
-    for signature, color in zip(exposures.T, colors):
-        signature_exposures = exposures.T[signature].to_numpy()
+    for dimension, color in zip(data, colors):
+        values = data[dimension].to_numpy()
         ax.bar(
-            np.arange(n_samples),
-            signature_exposures,
+            np.arange(n_obs),
+            values,
             color=color,
             width=1,
-            label=signature,
+            label=dimension,
             linewidth=0,
             bottom=bottom,
             **kwargs,
         )
-        bottom += signature_exposures
+        bottom += values
 
-    if annotate_samples:
-        ax.set_xticks(np.arange(n_samples))
-        ax.set_xticklabels(exposures.columns, rotation=90, ha="center", fontsize=10)
-
+    if annotate_obs:
+        ax.set_xticks(np.arange(n_obs))
+        ax.set_xticklabels(data.index, rotation=90, ha="center", fontsize="x-small")
     else:
         ax.get_xaxis().set_visible(False)
 
-    ax.set_title("Sample exposures")
+    if title:
+        ax.set_title(title)
+
     ax.spines[["left", "bottom"]].set_visible(False)
     ax.get_yaxis().set_visible(False)
     ax.legend(loc="center left", bbox_to_anchor=(0.975, 0.5), ncol=ncol_legend)
