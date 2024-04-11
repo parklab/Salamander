@@ -1,13 +1,18 @@
 """
 Initialization methods for non-negative matrix factorization (NMF)
 """
+from __future__ import annotations
+
+from typing import Literal, get_args
+
 import numpy as np
+import pandas as pd
 from sklearn.decomposition import _nmf as sknmf
 
 from ..utils import normalize_WH, shape_checker, type_checker, value_checker
 
 EPSILON = np.finfo(np.float32).eps
-INIT_METHODS = [
+_Init_methods = Literal[
     "custom",
     "flat",
     "hierarchical_cluster",
@@ -17,11 +22,12 @@ INIT_METHODS = [
     "random",
     "separableNMF",
 ]
+_INIT_METHODS = get_args(_Init_methods)
 
 
 def init_custom(
     X: np.ndarray, n_signatures: int, W_custom: np.ndarray, H_custom: np.ndarray
-):
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Perform type and shape checks on custom signature and
     exposure matrix initializations.
@@ -34,7 +40,7 @@ def init_custom(
     return W_custom, H_custom
 
 
-def init_flat(X: np.ndarray, n_signatures: int):
+def init_flat(X: np.ndarray, n_signatures: int) -> tuple[np.ndarray, np.ndarray]:
     """
     Initialize the signature and exposure matrices with one float, respectively.
     """
@@ -45,7 +51,12 @@ def init_flat(X: np.ndarray, n_signatures: int):
     return W, H
 
 
-def init_nndsvd(X: np.ndarray, n_signatures: int, init: str, seed=None):
+def init_nndsvd(
+    X: np.ndarray,
+    n_signatures: int,
+    init: Literal["nndsvd", "nndsvda", "nndsvdar"],
+    seed: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     A wrapper around the non-negative double singular value decomposition (NNDSVD)
     initialization methods "nndsvd", "nndsvda" and "nndsvdar" from scikit-learn.
@@ -64,7 +75,9 @@ def init_nndsvd(X: np.ndarray, n_signatures: int, init: str, seed=None):
     return W, H
 
 
-def init_random(X: np.ndarray, n_signatures: int, seed=None):
+def init_random(
+    X: np.ndarray, n_signatures: int, seed: int | None = None
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Initialize each signature by drawing from the uniform
     distribution on the simplex.
@@ -83,7 +96,9 @@ def init_random(X: np.ndarray, n_signatures: int, seed=None):
     return W, H
 
 
-def init_separableNMF(X: np.ndarray, n_signatures: int, seed=None):
+def init_separableNMF(
+    X: np.ndarray, n_signatures: int, seed: int | None = None
+) -> tuple[np.ndarray, np.ndarray]:
     r"""
     This code is following Algorithm 1 from "Fast and Robust Recursive
     Algorithms for Separable Nonnegative Matrix Factorization"
@@ -109,15 +124,15 @@ def init_separableNMF(X: np.ndarray, n_signatures: int, seed=None):
 def initialize(
     X: np.ndarray,
     n_signatures: int,
-    init_method="nndsvd",
-    given_signatures=None,
+    init_method: _Init_methods = "nndsvd",
+    given_signatures: pd.DataFrame | None = None,
     **kwargs,
-):
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Initialize the signature and exposure matrices.
 
-    Parameters
-    ----------
+    Inputs
+    ------
     X : np.ndarray
         count matrix
 
@@ -126,12 +141,12 @@ def initialize(
 
     init_method : str
         initialization method. One of 'custom', 'flat', 'hierarchical_cluster',
-        'nndsvd', 'nndsvda', 'nndsvdar', 'random', 'separableNMF'
+        'nndsvd', 'nndsvda', 'nndsvdar', 'random', 'separableNMF'.
 
-    given_signatures : pd.Dataframe, default=None
+    given_signatures : pd.Dataframe, optional
         At most 'n_signatures' many signatures can be provided to
         overwrite some of the initialized signatures. This does not
-        change the initialized exposurse.
+        change the initialized exposurses.
 
     kwargs : dict
         Any keyword arguments to be passed to the initialization method.
@@ -146,13 +161,13 @@ def initialize(
     H : np.ndarray
         exposure matrix
 
-    signature_names : list
+    signature_names : np.ndarray
         The signature names. By default, the signatures are named
         'Sigk', where 'k' is one plus the index of the signature.
         If 'given_signatures' are provided, the names are adjusted
         accordingly.
     """
-    value_checker("init_method", init_method, INIT_METHODS)
+    value_checker("init_method", init_method, _INIT_METHODS)
 
     if init_method == "custom":
         W, H = init_custom(X, n_signatures, **kwargs)
@@ -161,7 +176,8 @@ def initialize(
         W, H = init_flat(X, n_signatures)
 
     elif init_method in ["nndsvd", "nndsvda", "nndsvdar"]:
-        W, H = init_nndsvd(X, n_signatures, init=init_method, **kwargs)
+        # mypy does not recognize that init_method is compatible with Literal["nndsvd", "nndsvda", "nndsvdar"]
+        W, H = init_nndsvd(X, n_signatures, init=init_method, **kwargs)  # type: ignore[arg-type]
 
     elif init_method == "random":
         W, H = init_random(X, n_signatures, **kwargs)
