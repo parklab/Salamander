@@ -1,249 +1,146 @@
-from abc import abstractmethod
+from __future__ import annotations
 
+import warnings
+from abc import abstractmethod
+from typing import TYPE_CHECKING
+
+import anndata as ad
 import numpy as np
 import pandas as pd
 
-from ..utils import match_signatures_pair
+from .. import tools as tl
+from ..utils import _get_basis_obsm, match_signatures_pair, type_checker
 from .initialization import initialize
-from .signature_nmf import SignatureNMF
+from .signature_nmf import SignatureNMF, _Dim_reduction_methods
 
-EPSILON = np.finfo(np.float32).eps
+if TYPE_CHECKING:
+    from typing import Any, Literal
+
+    from .signature_nmf import _Dim_reduction_methods
+
+_PARAMETERS_NAMES = ["asignatures", "exposures"]
+_DEFAULT_GIVEN_PARAMETERS = {parameter: None for parameter in _PARAMETERS_NAMES}
 
 
 class StandardNMF(SignatureNMF):
     """
     The abstract class StandardNMF unifies the structure of NMF algorithms
-    with a single signature matrix W and exposure matrix H.
+    with a signature and exposure matrix.
+
     Examples of these algorithms include the NMF algorithms from
-    (Lee and Seung, 1999), minimum volume NMF (mvNMF) or NMF variants
+    (Lee and Seung, 1999), minimum volume NMF (mvNMF) or any NMF variants
     with regularizations on the entries of W or H.
     All of these NMF algorithms have the same parameters. Therefore,
-    many properties of interest such as the signature correlation martrix
-    or the sample embeddings are computed in the same manner.
-
-    Overview:
-
-    Every child class has to implement the following attributes:
-
-        - reconstruction_error: float
-            The reconstruction error between the count matrix and
-            the reconstructed count matrix.
-
-        - samplewise_reconstruction_error: np.ndarray
-            The samplewise reconstruction error between the sample counts
-            and the reconstructed sample counts.
-
-        - objective: str
-            "minimize" or "maximize". Whether the NMF algorithm maximizes or
-            minimizes the objective function.
-            Some algorithms maximize a likelihood, others minimize a distance.
-            The distinction is useful for filtering NMF runs based on
-            the fitted objective function value downstream.
-
-
-    Every child class has to implement the following methods:
-
-        - objective_function:
-            The algorithm-specific objective function
-
-        - loglikelihood:
-            The loglikelihood of the underyling generative model
-
-        - _update_W:
-            update the signature matrix W
-
-        - _update_H:
-            update the exposure matrix H
-
-        - fit:
-            Apply the NMF algorithm for a given mutation count data or
-            for given signatures and mutation count data
-
-
-    The following attributes are implemented in the abstract class NMF:
-
-        - signatures: pd.DataFrame
-            The signature matrix including mutation type names and signature names
-
-        - exposures: pd.DataFrame
-            The exposure matrix including the signature names and sample names
-
-        - _n_parameters:
-            The number of parameters of models with signature and exposure matrices
-
-        - corr_signatures: pd.DataFrame
-            The signature correlation matrix induced by their sample exposures
-
-        - corr_samples: pd.DataFrame
-            The sample correlation matrix induced by their signature exposures
-
-
-    The following methods are implemented in the abstract class NMF:
-
-        - _initialize:
-            Initialize all model parameters
-
-        - _get_embedding_data:
-            A helper function for the embedding plot. Models with signature and
-            exposure matrices use the exposures as the lower-dimensional
-            representation of the samples
-
-        - _get_default_embedding_annotations:
-            A helper function for the embedding plot. By default, no samples are
-            annotated
+    their initializations are identical, and the lower-dimensional
+    representations are the sample exposures.
     """
 
-    def __init__(
+    def _initialize(
         self,
-        n_signatures=1,
-        init_method="nndsvd",
-        min_iterations=500,
-        max_iterations=10000,
-        conv_test_freq=10,
-        tol=1e-7,
+        given_parameters: dict[str, Any] | None = None,
+        init_kwargs: dict[str, Any] | None = None,
     ):
         """
-        Input:
-        ------
-        n_signatures: int
-            The number of underlying signatures that are assumed to
-            have generated the mutation count data.
-
-        init_method: str
-            One of "custom", "flat", "hierarchical_cluster", "nndsvd",
-            "nndsvda", "nndsvdar" "random" and "separableNMF".
-            See the initialization module for further details on each method.
-
-        min_iterations: int
-            The minimum number of iterations to perform during inference
-
-        max_iterations: int
-            The maximum number of iterations to perform during inference
-
-        conv_test_freq: int
-            The frequency at which the algorithm is tested for convergence.
-            The objective function value is only computed every 'conv_test_freq'
-            many iterations, which also affects a potentially saved history of
-            the objective function values.
-
-        tol: float
-            The NMF algorithm is converged when the relative change
-            of the objective function of one iteration is smaller
-            than the tolerance 'tol'.
-        """
-        super().__init__(
-            n_signatures,
-            init_method,
-            min_iterations,
-            max_iterations,
-            conv_test_freq,
-            tol,
-        )
-
-        # initialize data/fitting dependent attributes
-        self.W, self.H = None, None
-
-    @property
-    def signatures(self) -> pd.DataFrame:
-        signatures = pd.DataFrame(
-            self.W, index=self.mutation_types, columns=self.signature_names
-        )
-        return signatures
-
-    @property
-    def exposures(self) -> pd.DataFrame:
-        exposures = pd.DataFrame(
-            self.H, index=self.signature_names, columns=self.sample_names
-        )
-        return exposures
-
-    @property
-    def _n_parameters(self) -> int:
-        """
-        There are n_features * n_signatures parameters corresponding to
-        the signature matrix and n_signatures * n_samples parameters
-        corresponding to the exposure matrix.
-        """
-        return self.n_signatures * (self.n_features + self.n_samples)
-
-    @abstractmethod
-    def _update_W(self):
-        pass
-
-    @abstractmethod
-    def _update_H(self):
-        pass
-
-    def _initialize(self, given_signatures=None, init_kwargs=None):
-        """
-        Initialize the signature matrix W and exposure matrix H.
-        When the signatures are given, the initialization
-        of W is overwritten by the given signatures.
+        Initialize the signatures and exposures.
+        A subset of the signatures can be given by the user. They will
+        not be overwritten during fitting.
 
         Input:
         ------
-        given_signatures : pd.Dataframe, default=None
-            At most 'n_signatures' many signatures can be provided to
-            overwrite some of the initialized signatures. This does not
-            change the initialized exposurse.
+        given_parameters : dict, default=None
+            Optinally given 'asignatures' AnnData signatures object.
 
         init_kwargs: dict
             Any further keywords arguments to be passed to the initialization method.
-            This includes, for example, a possible 'seed' keyword argument
-            for all stochastic methods.
+            This includes, for example, an optional 'seed' for all stochastic methods.
         """
-        if given_signatures is not None:
-            self._check_given_signatures(given_signatures)
-            self.n_given_signatures = len(given_signatures.columns)
+        if given_parameters is None:
+            given_parameters = _DEFAULT_GIVEN_PARAMETERS
+            given_signatures = None
         else:
-            self.n_given_signatures = 0
+            given_parameters = given_parameters.copy()
+
+        type_checker("given_parameters", given_parameters, dict)
+
+        for parameter in given_parameters:
+            if parameter not in _PARAMETERS_NAMES:
+                raise ValueError(
+                    f"The given parameters include parameters outside of {_PARAMETERS_NAMES}."
+                )
+
+        given_asignatures = given_parameters["asignatures"]
+
+        if given_asignatures is not None:
+            self._check_given_asignatures(given_asignatures)
+            given_signatures = given_asignatures.to_df().T
 
         init_kwargs = {} if init_kwargs is None else init_kwargs.copy()
-        self.W, self.H, self.signature_names = initialize(
-            self.X, self.n_signatures, self.init_method, given_signatures, **init_kwargs
+        # initialize takes counts X of shape (n_features, n_samples),
+        # and given_signatures of shape (n_features, n_given_signatures)
+        W, H, signature_names = initialize(
+            self.adata.X.T,
+            self.n_signatures,
+            self.init_method,
+            given_signatures,
+            **init_kwargs,
         )
+        self.asignatures = ad.AnnData(W.T)
+        self.asignatures.obs_names = signature_names
+        self.asignatures.var_names = self.mutation_types
 
-    @property
-    def corr_signatures(self) -> pd.DataFrame:
-        """
-        The correlation of two signatures is given by the pearson correlation of
-        the respective rows of the exposure matrix H.
+        # keep signature annotations
+        if given_asignatures is not None:
+            n_given_signatures = given_asignatures.n_obs
+            asignatures_new = self.asignatures[n_given_signatures:, :]
+            self.asignatures = ad.concat(
+                [given_asignatures, asignatures_new], join="outer"
+            )
 
-        The pandas dataframe method 'corr' computes the pairwise correlation of columns.
-        """
-        return self.exposures.T.corr(method="pearson")
+        self.adata.obsm["exposures"] = H.T
+        return given_parameters
 
-    @property
-    def corr_samples(self) -> pd.DataFrame:
-        """
-        The correlation of two samples is given by the pearson correlation of
-        the respective columns of the exposure matrix H.
-
-        The pandas dataframe method 'corr' computes the pairwise correlation of columns.
-        """
-        return self.exposures.corr(method="pearson")
-
-    def reorder(self, other_signatures, metric="cosine", keep_names=False):
+    def reorder(
+        self,
+        asignatures_other: ad.AnnData,
+        metric: str = "cosine",
+    ) -> None:
         reordered_indices = match_signatures_pair(
-            other_signatures, self.signatures, metric=metric
+            asignatures_other.to_df().T, self.asignatures.to_df().T, metric=metric
         )
-        self.W = self.W[:, reordered_indices]
-        self.H = self.H[reordered_indices, :]
+        self.asignatures = self.asignatures[reordered_indices, :].copy()
+        self.adata.obsm["exposures"] = self.adata.obsm["exposures"][
+            :, reordered_indices
+        ]
 
-        if keep_names:
-            self.signature_names = self.signature_names[reordered_indices]
+    def reduce_dimension_embeddings(
+        self, method: _Dim_reduction_methods = "umap", n_components: int = 2, **kwargs
+    ) -> None:
+        tl.reduce_dimension(
+            self.adata,
+            basis="exposures",
+            method=method,
+            n_components=n_components,
+            **kwargs,
+        )
 
-        return reordered_indices
-
-    def _get_embedding_data(self):
+    def _get_embedding_plot_adata(
+        self, method: _Dim_reduction_methods = "umap"
+    ) -> tuple[ad.AnnData, str]:
         """
-        In most NMF models like KL-NMF or mvNMF, the data for the embedding plot
-        are just the (transposed) exposures.
+        Plot the exposures directly if the number of signatures is at most 2.
         """
-        return self.H.T.copy()
+        if self.n_signatures <= 2:
+            warnings.warn(
+                f"There are only {self.n_signatures} many signatures. "
+                "The exposures are plotted directly.",
+                UserWarning,
+            )
+            return self.adata, "exposures"
 
-    def _get_default_embedding_annotations(self):
+        return self.adata, method
+
+    def _get_default_embedding_plot_annotations(self) -> None:
         """
         The embedding plot defaults to no annotations.
         """
-        return None
+        return

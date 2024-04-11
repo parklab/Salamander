@@ -1,19 +1,30 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Iterable, Literal, get_args
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from anndata import AnnData
 
-from ..plot import (
-    corr_plot,
-    embeddings_plot,
-    exposures_plot,
-    history_plot,
-    signatures_plot,
-)
+from .. import plot as pl
+from .. import tools as tl
 from ..utils import type_checker, value_checker
+from .initialization import _INIT_METHODS, EPSILON, _Init_methods
 
-EPSILON = np.finfo(np.float32).eps
+if TYPE_CHECKING:
+    from typing import Any
+
+    from matplotlib.axes import Axes
+    from seaborn.matrix import ClusterGrid
+
+_Dim_reduction_methods = Literal[
+    "pca",
+    "tsne",
+    "umap",
+]
+_DIM_REDUCTION_METHODS = get_args(_Dim_reduction_methods)
 
 
 class SignatureNMF(ABC):
@@ -26,142 +37,141 @@ class SignatureNMF(ABC):
 
     Every child class has to implement the following attributes:
 
-        - signatures: pd.DataFrame
-            The signature matrix including mutation type names and signature names
-
-        - exposures: pd.DataFrames
-            The exposure matrix including the signature names and sample names
-
-        - _n_parameters: int
-            The number of parameters fitted by the NMF algorithm.
-            This is needed to compute the Bayesian Information Criterion (BIC)
-
-        - reconstruction_error: float
-            The reconstruction error between the count matrix and
-            the reconstructed count matrix.
-
-        - samplewise_reconstruction_error: np.ndarray
-            The samplewise reconstruction error between the sample counts and
-            the reconstructed sample counts.
-
-        - objective: str
-            "minimize" or "maximize". Whether the NMF algorithm maximizes or
-            minimizes the objective function. Some algorithms maximize a likelihood,
-            others minimize a distance. The distinction is useful for filtering NMF runs
-            based on the fitted objective function value downstream.
-
-        - corr_signatures: pd.DataFrame
-            The signature correlation matrix
-
-        - corr_samples: pd.DataFrame
-            The sample correlation matrix
-
+        - objective: Literal["minimize", "maximize"]
+            Whether the NMF algorithm minimize or maximize the objective function.
+            Some algorithms maximize a likelihood, others minimize a distance.
 
     Every child class has to implement the following methods:
 
-        - objective_fuction:
-            The objective function to optimize when running the algorithm
+        - compute_reconstruction_errors:
+            Add the samplewise reconstruction errors to adata.obs with the key
+            'reconstruction_error'.
 
-        - loglikelihood:
-            The loglikelihood of the underyling generative model
+        - objective_fuction:
+            The objective function to optimize during model training.
 
         - _initialize:
-            A method to initialize all model parameters before fitting
+            Initialize all model parameters before model training.
 
-        - fit:
-            Run the NMF algorithm for a given mutation count data. Every
-            fit method should also implement a version that allows fixing
-            arbitrary many a priori known signatures.
+        - _setup_fitting_parameters:
+            Initialize any additional and parameters required to fit
+            the NMF model.
 
-        - _get_embedding_data:
-            A helper function for the embedding plot
+        - _update_parameters:
+            Update all model parameters.
 
-        - _get_default_embedding_annotations:
-            A helper function for the embedding plot
+        - reorder:
+            Reorder the model parameters to match the order of another
+            collection of signatures.
 
+        - reduce_dimension_embeddings:
+            Reduce the dimension of the canonical model embeddings.
+            These are typically the sample exposures.
+
+        - _get_embedding_plot_adata:
+            A helper function for the embedding plot.
+
+        - _get_default_embedding_plot_annotations:
+            A helper function for the embedding plot.
 
     The following attributes and methods are implemented in SignatureNMF:
 
+        - mutation_types: np.ndarray
+            Wrapper around the var_names of the count data.
+
+        - signature_names: np.ndarray
+            Wrapper around the obs_names of the signatures AnnData object.
+
+        - sample_names: np.ndarrray
+            Wrapper around the obs_names of the count data.
+
+        - signatures: pd.DataFrame
+            Wrapper around the signatures AnnData object to return
+            the signatures as a dataframe.
+
+        - exposures: pd.DataFrame
+            Wrapper around adata.obsm to return the signature exposures
+            as a dataframe.
+
+        - compute_reconstruction: None
+            Add the reconstrcuted counts to adata.obsm with key 'X_reconstructed'.
+
         - data_reconstructed: pd.DataFrame
-            The recovered mutation count data given
-            the current signatures and exposures.
+            The recovered mutation count data as a dataframe.
 
-        - X_reconstructed: np.ndarray
-            The recovered mutation count matrix given
-            the current signatures and exposures
+        - reconstruction_error: float
+            The sum of the samplewise reconstruction errors.
 
-        - bic: float
-            The value of the Bayesian Information Criterion (BIC)
+        - _setup_adata:
+            Perform parameter checks on the input AnnData count object and clip zeros.
 
-        - _setup_data_parameters:
-            Perform parameter checks on the input data and add attributes
+        - _check_given_asignatures:
+            Perform parameter checks on the optial input AnnData signature object.
+
+        - fit:
+            Fit all model parameters.
+
+        - compute_correlation:
+            Add sample or signature correlations to the AnnData objects.
+
+        - correlation:
+            The sample or signature correlation as a dataframe.
 
         - plot_history:
             Plot the history of the objective function values after fitting the model
 
         - plot_signatures:
-            Plot the signatures using the signatures_plot function implemented in
-            the plot module
+            Plot the signatures as a barplot.
+
+        - plot_exposures:
+            Plot the exposures as a stacked barplot.
 
         - plot_correlation:
-            Plot the correlation of either the signatures or exposures
-            using the corr_plot function implemented in the plot module
+            Plot the correlation of either the signatures or exposures.
 
         - plot_embeddings:
             Plot the sample (and potentially the signature) embeddings in 2D
-            using PCA, tSNE or UMAP
+            using PCA, tSNE or UMAP.
     """
 
     def __init__(
         self,
-        n_signatures=1,
-        init_method="nndsvd",
-        min_iterations=500,
-        max_iterations=10000,
-        conv_test_freq=10,
-        tol=1e-7,
+        n_signatures: int = 1,
+        init_method: _Init_methods = "nndsvd",
+        min_iterations: int = 500,
+        max_iterations: int = 10000,
+        conv_test_freq: int = 10,
+        tol: float = 1e-7,
     ):
         """
-        Input:
+        Inputs
         ------
         n_signatures: int
-            The number of underlying signatures that are assumed to
-            have generated the mutation count data
+            The number of signatures that are assumed to
+            have generated the mutation count data.
 
-        init_method: str
-            The initialization method for the NMF algorithm
+        init_method: str, default='nndsvd'
+            The model parameter initialization method.
 
-        min_iterations: int
+        min_iterations: int, default=500
             The minimum number of iterations to perform by the NMF algorithm
 
-        max_iterations: int
+        max_iterations: int, default=10000
             The maximum number of iterations to perform by the NMF algorithm
 
-        conv_test_freq: int
+        conv_test_freq: int, default=10
             The frequency at which the algorithm is tested for convergence.
             The objective function value is only computed every 'conv_test_freq'
-            many iterations, which also affects a potentially saved history of
-            the objective function values.
+            many iterations.
 
         tol: float
-            The NMF algorithm is converged when the relative change of
-            the objective function of one iteration is smaller
-            than the tolerance 'tol'.
+            The convergence tolerance. The NMF algorithm is converged
+            when the relative change of the objective function is smaller
+            than 'tol'.
         """
-        init_methods = [
-            "custom",
-            "flat",
-            "hierarchical_cluster",
-            "nndsvd",
-            "nndsvda",
-            "nndsvdar",
-            "random",
-            "separableNMF",
-        ]
-        value_checker("init_method", init_method, init_methods)
+        value_checker("init_method", init_method, _INIT_METHODS)
 
         self.n_signatures = n_signatures
-        self.signature_names = None
         self.init_method = init_method
         self.min_iterations = min_iterations
         self.max_iterations = max_iterations
@@ -169,178 +179,256 @@ class SignatureNMF(ABC):
         self.tol = tol
 
         # initialize data/fitting dependent attributes
-        self.X = None
-        self.n_features = 0
-        self.n_given_signatures = 0
-        self.n_samples = 0
-        self.mutation_types = np.empty(0, dtype=str)
-        self.sample_names = np.empty(0, dtype=str)
-        self.history = {}
+        self.adata = AnnData()
+        self.asignatures = AnnData()
+        self.history: dict[str, Any] = {}
 
     @property
-    @abstractmethod
+    def mutation_types(self) -> np.ndarray:
+        return self.adata.var_names.to_numpy(dtype=str)
+
+    @property
+    def signature_names(self) -> np.ndarray:
+        return self.asignatures.obs_names.to_numpy(dtype=str)
+
+    @property
+    def sample_names(self) -> np.ndarray:
+        return self.adata.obs_names.to_numpy(dtype=str)
+
+    @property
     def signatures(self) -> pd.DataFrame:
         """
         Extract the mutational signatures as a pandas dataframe.
         """
-        pass
+        return self.asignatures.to_df()
 
     @property
-    @abstractmethod
     def exposures(self) -> pd.DataFrame:
         """
-        Extract the signature exposures of samples as a pandas dataframe.
+        Extract the signature exposures as a pandas dataframe.
         """
-        pass
+        assert (
+            "exposures" in self.adata.obsm
+        ), "Learning the sample exposures requires fitting the NMF model."
+        exposures_df = pd.DataFrame(
+            self.adata.obsm["exposures"],
+            index=self.sample_names,
+            columns=self.signature_names,
+        )
+        return exposures_df
+
+    def compute_reconstruction(self) -> None:
+        self.adata.obsm["X_reconstructed"] = (
+            self.adata.obsm["exposures"] @ self.asignatures.X
+        )
 
     @property
     def data_reconstructed(self) -> pd.DataFrame:
-        return (self.signatures @ self.exposures).astype(int)
+        if not "X_reconstructed" in self.adata.obsm:
+            self.compute_reconstruction()
 
-    @property
-    def X_reconstructed(self) -> np.ndarray:
-        return self.data_reconstructed.values
+        return pd.DataFrame(
+            self.adata.obsm["X_reconstructed"],
+            index=self.sample_names,
+            columns=self.mutation_types,
+        )
 
-    @property
     @abstractmethod
+    def compute_reconstruction_errors(self) -> None:
+        """
+        The samplewise reconstruction errors between the data
+        and the reconstructed data.
+        """
+
+    @property
     def reconstruction_error(self) -> float:
         """
-        The reconstruction error between the count matrix and
-        the reconstructed count matrix.
+        The total reconstruction error between the data and
+        the reconstructed data.
         """
-        pass
+        if not "reconstruction_error" in self.adata.obs:
+            self.compute_reconstruction_errors()
+
+        return np.sum(self.adata.obs["reconstruction_error"])
 
     @property
     @abstractmethod
-    def samplewise_reconstruction_error(self) -> np.ndarray:
+    def objective(self) -> Literal["minimize", "maximize"]:
         """
-        The samplewise reconstruction error between the sample counts and
-        the reconstructed sample counts.
+        Whether the NMF algorithm minimizes or maximizes its objective
+        function.
         """
-        pass
 
     @abstractmethod
     def objective_function(self) -> float:
         """
         The objective function to be optimized during fitting.
         """
-        pass
 
-    @abstractmethod
-    def loglikelihood(self) -> float:
+    def _setup_adata(self, adata: AnnData) -> None:
         """
-        The log-likelihood of the underlying generative model.
-        """
-        pass
+        Check the type of the input counts and clip them to
+        avoid floating point errors.
 
-    @property
-    @abstractmethod
-    def _n_parameters(self) -> int:
+        Inputs
+        ------
+        data: AnnData
+            The AnnData object with the mutation count matrix.
         """
-        Every child class has to implement a function returning
-        the number of parameters estimated by the respective model.
-        This is allows to, for example, implement the BIC
-        (Bayesian information criterion). The BIC can be used to
-        estimate the optimal number of signatures.
-        """
-        pass
+        type_checker("adata", adata, AnnData)
+        self.adata = adata
+        self.adata.X = self.adata.X.clip(EPSILON)
 
-    @property
-    def bic(self) -> float:
-        """
-        Bayesian information criterion (BIC).
-        Can only be called after the _setup_parameters_fitting function as it
-        requires the number of samples be an attribute.
-        """
-        return self._n_parameters * np.log(self.n_samples) - 2 * self.loglikelihood()
-
-    def _check_given_signatures(self, given_signatures: pd.DataFrame):
+    def _check_given_asignatures(self, given_asignatures: AnnData) -> None:
         """
         Check if the given signatures are compatible with the
         number of signatures of the algorithm and the
         mutation types of the input data.
+        Should be called by implementations of _initialize.
 
-        given_signatures: pd.DataFrame
+        Inputs
+        ------
+        given_asignatures: AnnData
             Known signatures that should be fixed by the algorithm.
             The number of known signatures can be less or equal to the
-            number of signatures specified in the algorithm instance.
+            number of signatures specified by the algorithm.
         """
-        type_checker("given_signatures", given_signatures, pd.DataFrame)
-        given_mutation_types = given_signatures.index.to_numpy(dtype=str)
+        type_checker("given_asignatures", given_asignatures, AnnData)
+        given_mutation_types = given_asignatures.var_names.to_numpy(dtype=str)
         compatible = (
             np.array_equal(given_mutation_types, self.mutation_types)
-            and given_signatures.shape[1] <= self.n_signatures
+            and given_asignatures.n_obs <= self.n_signatures
         )
-
         if not compatible:
             raise ValueError(
                 f"You have to provide at most {self.n_signatures} signatures with "
-                f"mutation types matching to your data."
+                "mutation types matching to your data."
             )
 
     @abstractmethod
-    def _initialize(self):
+    def _initialize(
+        self,
+        given_parameters: dict[str, Any] | None = None,
+        init_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
-        Initialize model parameters and attributes before fitting.
-        Enforcing the existence of _initialize unifies the implementation of
-        the NMF algorithms.
+        Initialize the NMF model parameters and return the potentially
+        updated 'given_parameters'.
 
         Example:
-
             Before running the Lee & Seung NMF multiplicative update rules to
-            decompose the mutation count matrix X into a signature matrix W and
-            an exposure matrix H, both W and H have to be initialized.
+            decompose the mutation count matrix into a signature matrix and
+            an exposure matrix, both matrices have to be initialized.
         """
-
-    def _setup_data_parameters(self, data: pd.DataFrame):
-        """
-        Perform parameter checks before running the fit method.
-
-        Input:
-        ------
-        data: pd.DataFrame
-            The mutation count pandas dataframe with indices and column names.
-            Samples are expected to corresponding to columns.
-        """
-        type_checker("data", data, pd.DataFrame)
-        self.X = data.values.clip(EPSILON)
-        self.n_features, self.n_samples = data.shape
-        self.mutation_types = data.index.values.astype(str)
-        self.sample_names = data.columns.values.astype(str)
 
     @abstractmethod
-    def fit(self, data: pd.DataFrame, given_signatures=None):
+    def _setup_fitting_parameters(
+        self, fitting_kwargs: dict[str, Any] | None = None
+    ) -> None:
         """
-        Fit the model parameters. Child classes are expected to handle
-        'given_signatures' appropriately.
+        Initialize any additional and parameters required to fit
+        the NMF model.
+        """
 
-        Input:
+    @abstractmethod
+    def _update_parameters(self, given_parameters: dict[str, Any]) -> None:
+        """
+        Update all model parameters.
+        """
+
+    def fit(
+        self,
+        adata: AnnData,
+        given_parameters: dict[str, Any] | None = None,
+        init_kwargs: dict[str, Any] | None = None,
+        fitting_kwargs: dict[str, Any] | None = None,
+        history: bool = True,
+        verbose: Literal[0, 1] = 0,
+        verbosity_freq: int = 1000,
+    ) -> SignatureNMF:
+        """
+        Fit the model parameters. NMF models are expected to handle
+        'given_parameters' appropriately.
+
+        Inputs
         ------
-        data: pd.DataFrame
-            The named mutation count data of shape (n_features, n_samples).
+        adata: AnnData
+            The mutation count matrix as an AnnData object.
 
-        given_signatures: pd.DataFrame, by default None
-            A priori known signatures. The number of given signatures has
-            to be less or equal to the number of signatures of NMF
-            algorithm instance, and the mutation type names have to match
-            the mutation types of the count data.
+        given_parameters: dict, optional
+            A priori known parameters. The key is expected to be the parameter
+            name.
+
+        init_kwargs: dict, optional
+            Keyword arguments to pass to the model parameter initialization, e.g.,
+            a seed when a stochastic initialization method is used.
+
+        fitting_kwargs: dict, optional
+            Keyword arguments to pass to the initialization of additional fitting
+            parameters, e.g., sample-specific loss function weights.
+
+        history: bool, default=True
+            If True, the objective function values computed during model training
+            will be stored.
+
+        verbose: Literal[0, 1], default=0
+            If True, intermediate objective function values obtained during model
+            training are printed.
+
+        verbosity_freq: int, default=1000
+            The objective function values after every 'verbosity_freq' many
+            iterations are printed. Only applies if 'verbose' is set to 1.
+        """
+        self._setup_adata(adata)
+        given_parameters = self._initialize(given_parameters, init_kwargs)
+        self._setup_fitting_parameters(fitting_kwargs)
+        of_values = [self.objective_function()]
+        n_iteration = 0
+        converged = False
+
+        while not converged:
+            n_iteration += 1
+
+            if verbose and n_iteration % verbosity_freq == 0:
+                print(f"iteration: {n_iteration}; objective: {of_values[-1]:.2f}")
+
+            self._update_parameters(given_parameters)
+
+            if n_iteration % self.conv_test_freq == 0:
+                prev_of_value = of_values[-1]
+                of_values.append(self.objective_function())
+                rel_change_nominator = np.abs(prev_of_value - of_values[-1])
+                rel_change = rel_change_nominator / np.abs(prev_of_value)
+                converged = rel_change < self.tol and n_iteration >= self.min_iterations
+
+            converged |= n_iteration >= self.max_iterations
+
+        if history:
+            self.history["objective_function"] = of_values[1:]
+
+        return self
+
+    @abstractmethod
+    def reorder(self, asignatures_other: AnnData) -> None:
+        """
+        Reorder the model parameters to match the order of another
+        collection of signatures.
         """
 
-    def plot_history(self, ax=None, min_iteration=0, outfile=None, **kwargs):
-        if not self.history:
-            raise ValueError(
-                "No history available, the model has to be fitted first. "
-                "Remember to set 'history' to 'True' when calling 'fit()'."
-            )
-
-        history_plot(
-            self.history["objective_function"],
-            self.conv_test_freq,
-            min_iteration=min_iteration,
-            ax=ax,
+    def plot_history(self, outfile: str | None = None, **kwargs) -> Axes:
+        """
+        Plot the history of the objective function values. See
+        the implemenation of 'history' in the plotting module.
+        """
+        assert "objective_function" in self.history, (
+            "No history available, the model has to be fitted first. "
+            "Remember to set 'history' to 'True' when calling 'fit()'."
+        )
+        ax = pl.history(
+            values=self.history["objective_function"],
+            conv_test_freq=self.conv_test_freq,
             **kwargs,
         )
-
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")
 
@@ -348,25 +436,19 @@ class SignatureNMF(ABC):
 
     def plot_signatures(
         self,
-        catalog=None,
-        colors=None,
-        annotate_mutation_types=False,
-        axes=None,
-        outfile=None,
+        annotate_mutation_types: bool = False,
+        outfile: str | None = None,
         **kwargs,
-    ):
+    ) -> Axes | Iterable[Axes]:
         """
-        Plot the signatures, see plot.py for the implementation of signatures_plot.
+        Plot the signatures, see the implementation of 'barplot' in
+        the plotting module.
         """
-        axes = signatures_plot(
-            self.signatures,
-            catalog=catalog,
-            colors=colors,
-            annotate_mutation_types=annotate_mutation_types,
-            axes=axes,
+        axes = pl.barplot(
+            self.asignatures,
+            annotate_vars=annotate_mutation_types,
             **kwargs,
         )
-
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")
 
@@ -374,27 +456,45 @@ class SignatureNMF(ABC):
 
     def plot_exposures(
         self,
-        sample_order=None,
-        reorder_signatures=True,
-        annotate_samples=True,
-        colors=None,
-        ncol_legend=1,
-        ax=None,
-        outfile=None,
+        sample_order: np.ndarray | None = None,
+        reorder_signatures: bool = True,
+        annotate_samples: bool = True,
+        outfile: str | None = None,
         **kwargs,
-    ):
+    ) -> Axes:
         """
-        Visualize the exposures as a stacked bar chart,
-        see plot.py for the implementation.
+        Visualize the exposures as a stacked bar chart, see
+        the implementation of 'stacked_barplot' in the plotting
+        module.
+
+        Inputs
+        ------
+        sample_order: np.ndarray, optional
+            A pre-defined order of the samples along the x-axis.
+
+        reorder_signatures: bool, default=True
+            If True, the signatures are ordered by their total
+            relative contributions.
+
+        annotate_samples: bool, default=True
+            If True, the x-axis is annotated with the sample names.
+
+        outfile : str, default=None
+            If not None, the figure will be saved in the specified file path.
+
+        **kwargs:
+            Any further keyword arguments to pass to 'stacked_barplot'.
+
+        Returns
+        -------
+        ax : matplotlib.axes.Axes
+            The matplotlib axes containing the plot.
         """
-        ax = exposures_plot(
-            exposures=self.exposures,
-            sample_order=sample_order,
-            reorder_signatures=reorder_signatures,
-            annotate_samples=annotate_samples,
-            colors=colors,
-            ncol_legend=ncol_legend,
-            ax=ax,
+        ax = pl.stacked_barplot(
+            data=self.exposures,
+            obs_order=sample_order,
+            reorder_dimensions=reorder_signatures,
+            annotate_obs=annotate_samples,
             **kwargs,
         )
         if outfile is not None:
@@ -402,41 +502,71 @@ class SignatureNMF(ABC):
 
         return ax
 
-    @property
-    @abstractmethod
-    def corr_signatures(self) -> pd.DataFrame:
+    def compute_correlation(
+        self, data: Literal["samples", "signatures"] = "signatures", **kwargs
+    ) -> None:
         """
-        Every child class of SignatureNMF has to implement a function that
-        returns the signature correlation matrix as a pandas dataframe.
+        Compute the signature or sample correlation and store it in the
+        respective anndata object.
         """
+        value_checker("data", data, ["samples", "signatures"])
 
-    @property
-    @abstractmethod
-    def corr_samples(self) -> pd.DataFrame:
-        """
-        Every child class of SignatureNMF has to implement a function that
-        returns the sample correlation matrix as a pandas dataframe.
-        """
+        assert (
+            "exposures" in self.adata.obsm
+        ), "Computing the sample or signature correlation requires fitting the NMF model."
 
-    def plot_correlation(self, data="signatures", annot=False, outfile=None, **kwargs):
-        """
-        Plot the correlation matrix of the signatures or samples.
-        See plot.py for the implementation of corr_plot.
-
-        Input:
-        ------
-        *args, **kwargs:
-            arguments to be passed to corr_plot
-        """
-        value_checker("data", data, ["signatures", "samples"])
+        values = self.adata.obsm["exposures"]
 
         if data == "signatures":
-            corr = self.corr_signatures
+            values = values.T
+
+        correlation = tl._correlation(values, **kwargs)
+
+        if data == "samples":
+            self.adata.obsp["X_correlation"] = correlation
+        else:
+            self.asignatures.obsp["correlation"] = correlation
+
+    def correlation(
+        self, data: Literal["samples", "signatures"] = "signatures"
+    ) -> pd.DataFrame:
+        """
+        Dataframe of the signature or sample correlation.
+        """
+        value_checker("data", data, ["samples", "signatures"])
+
+        if data == "samples":
+            if "X_correlation" not in self.adata.obsp:
+                self.compute_correlation("samples")
+            values = self.adata.obsp["X_correlation"]
+            names = self.sample_names
 
         else:
-            corr = self.corr_samples
+            if "correlation" not in self.asignatures.obsp:
+                self.compute_correlation("signatures")
+            values = self.asignatures.obsp["correlation"]
+            names = self.signature_names
 
-        clustergrid = corr_plot(corr, annot=annot, **kwargs)
+        correlation_df = pd.DataFrame(values, index=names, columns=names)
+        return correlation_df
+
+    def plot_correlation(
+        self,
+        data: Literal["samples", "signatures"] = "signatures",
+        annot: bool | None = None,
+        outfile: str | None = None,
+        **kwargs,
+    ) -> ClusterGrid:
+        """
+        Plot the signature or sample correlation.
+        """
+        value_checker("data", data, ["samples", "signatures"])
+        corr = self.correlation(data=data)
+
+        if annot is None:
+            annot = False if data == "samples" else True
+
+        clustergrid = pl.correlation_pandas(corr, annot=annot, **kwargs)
 
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")
@@ -444,20 +574,40 @@ class SignatureNMF(ABC):
         return clustergrid
 
     @abstractmethod
-    def _get_embedding_data(self) -> np.ndarray:
+    def reduce_dimension_embeddings(
+        self, method: _Dim_reduction_methods = "umap", **kwargs
+    ) -> None:
         """
-        Get the data points for the dimensionality reduction / embedding plot.
-        One data point corresponds to a row of the embedding data.
-        Usually, these are the transposed exposures.
+        Reduce the dimension of the embeddings.
+        Usually, the embeddings are the signature exposures of the samples.
+        But in correlated NMF, they are the signature and sample embeddings
+        in a shared embedding space.
         """
 
     @abstractmethod
-    def _get_default_embedding_annotations(self) -> np.ndarray:
+    def _get_embedding_plot_adata(
+        self, method: _Dim_reduction_methods = "umap"
+    ) -> tuple[AnnData, str]:
         """
-        Get the annotations of the data points in the embedding plot.
+        Get the anndata object containing all embeddings
+        and the name of the embedding basis.
         """
 
-    def plot_embeddings(self, annotations=None, outfile=None, **kwargs):
+    @abstractmethod
+    def _get_default_embedding_plot_annotations(self) -> Iterable[str] | None:
+        """
+        Get the default annotations of the data points in the embedding plot.
+        """
+
+    def plot_embeddings(
+        self,
+        method: _Dim_reduction_methods = "umap",
+        n_components: int = 2,
+        dimensions: tuple[int, int] = (0, 1),
+        annotations: Iterable[str] | None = None,
+        outfile: str | None = None,
+        **kwargs,
+    ) -> Axes:
         """
         Plot a dimensionality reduction of the exposure representation.
         In most NMF algorithms, this is just the exposures of the samples.
@@ -465,12 +615,20 @@ class SignatureNMF(ABC):
         sample and signature embeddings in a shared embedding space.
 
         If the embedding dimension is one or two, the embeddings are be plotted
-        directly, ignoring the chosen method.
-        See plot.py for the implementation of 'embeddings_plot'.
+        directly, ignoring the chosen dimensionality reduction method.
 
-        Parameters
-        ----------
-        annotations : list[str], default=None
+        Inputs
+        ------
+        method: str, default='umap'
+            The dimensionality reduction method. One of ['pca', 'tsne', 'umap'].
+
+        n_components: int, default=2
+            The target dimension of the dimensionality reduction.
+
+        dimensions: tuple[int, int], default=(0,1)
+            The indices of the dimensions to plot.
+
+        annotations : Iterable[str], optional, default=None
             Annotations per data point, e.g. the sample names. If None,
             the algorithm-specific default annotations are used.
             For example, CorrNMF annotates the signature embeddings by default.
@@ -482,21 +640,26 @@ class SignatureNMF(ABC):
             If not None, the figure will be saved in the specified file path.
 
         **kwargs :
-            keyword arguments to pass to seaborn's scatterplot
+            keyword arguments to pass to the scatterplot implementation.
 
         Returns
         -------
         ax : matplotlib.axes.Axes
             The matplotlib axes containing the plot.
         """
-        # one data point corresponds to a row of embedding_data
-        embedding_data = self._get_embedding_data()
+        self.reduce_dimension_embeddings(method=method, n_components=n_components)
+        adata, basis = self._get_embedding_plot_adata(method=method)
 
         if annotations is None:
-            annotations = self._get_default_embedding_annotations()
+            annotations = self._get_default_embedding_plot_annotations()
 
-        ax = embeddings_plot(data=embedding_data, annotations=annotations, **kwargs)
-
+        ax = pl.embedding(
+            adata=adata,
+            basis=basis,
+            dimensions=dimensions,
+            annotations=annotations,
+            **kwargs,
+        )
         if outfile is not None:
             plt.savefig(outfile, bbox_inches="tight")
 
