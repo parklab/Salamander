@@ -9,6 +9,8 @@ import pandas as pd
 from .utils import _get_basis_obsm, value_checker
 
 if TYPE_CHECKING:
+    from typing import Iterable
+
     from anndata import AnnData
 
 
@@ -131,6 +133,33 @@ def reduce_dimension(
     adata.obsm[f"X_{method}"] = _reduce_dimension(
         data, method=method, n_components=n_components, **kwargs
     )
+
+
+def reduce_dimension_multiple(
+    adatas: Iterable[AnnData], basis: str, method="umap", **kwargs
+) -> None:
+    """
+    Compute a joint dimensionality reduction of the same multi-dimensional observation
+    annotations of multiple AnnData instances.
+    """
+    data = np.concatenate([_get_basis_obsm(adata, basis) for adata in adatas])
+    n_dimensions = data.shape[1]
+
+    if n_dimensions in [1, 2]:
+        warnings.warn(
+            f"The dimension of the observation annotations is {n_dimensions}. "
+            "No dimensionality reduction will be applied.",
+            UserWarning,
+        )
+        return
+
+    data_reduced_dim = _reduce_dimension(data, method=method, **kwargs)
+    sum_n_obs = 0
+
+    for adata in adatas:
+        n_obs = adata.n_obs
+        adata.obsm[f"X_{method}"] = data_reduced_dim[sum_n_obs : sum_n_obs + n_obs, :]
+        sum_n_obs += n_obs
 
 
 def _correlation(data: np.ndarray, **kwargs) -> np.ndarray:
