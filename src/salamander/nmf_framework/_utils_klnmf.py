@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 from numba import njit
 from scipy.special import gammaln
@@ -6,7 +8,9 @@ EPSILON = np.finfo(np.float32).eps
 
 
 @njit(fastmath=True)
-def kl_divergence(X: np.ndarray, W: np.ndarray, H: np.ndarray, weights=None) -> float:
+def kl_divergence(
+    X: np.ndarray, W: np.ndarray, H: np.ndarray, weights: np.ndarray | None = None
+) -> float:
     r"""
     The generalized Kullback-Leibler divergence
     D_KL(X || WH) = \sum_vd X_vd * ln(X_vd / (WH)_vd) - \sum_vd X_vd + \sum_vd (WH)_vd.
@@ -51,7 +55,7 @@ def kl_divergence(X: np.ndarray, W: np.ndarray, H: np.ndarray, weights=None) -> 
 
 
 def samplewise_kl_divergence(
-    X: np.ndarray, W: np.ndarray, H: np.ndarray, weights=None
+    X: np.ndarray, W: np.ndarray, H: np.ndarray, weights: np.ndarray | None = None
 ) -> np.ndarray:
     """
     Per sample (weighted) generalized Kullback-Leibler divergence D_KL(x || Wh).
@@ -161,7 +165,7 @@ def update_W(
     X: np.ndarray,
     W: np.ndarray,
     H: np.ndarray,
-    weights_kl=None,
+    weights_kl: np.ndarray | None = None,
     n_given_signatures: int = 0,
 ) -> np.ndarray:
     """
@@ -214,7 +218,11 @@ def update_W(
 
 @njit
 def update_H(
-    X: np.ndarray, W: np.ndarray, H: np.ndarray, weights_kl=None, weights_l_half=None
+    X: np.ndarray,
+    W: np.ndarray,
+    H: np.ndarray,
+    weights_kl: np.ndarray | None = None,
+    weights_l_half: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     The multiplicative update rule of the exposure matrix H
@@ -274,10 +282,10 @@ def update_WH(
     X: np.ndarray,
     W: np.ndarray,
     H: np.ndarray,
-    weights_kl=None,
-    weights_l_half=None,
+    weights_kl: np.ndarray | None = None,
+    weights_l_half: np.ndarray | None = None,
     n_given_signatures: int = 0,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     A joint update rule for the signature matrix W and
     the exposure matrix H under the constraint of normalized
