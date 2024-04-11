@@ -9,12 +9,16 @@ from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import pairwise_distances
 
 if TYPE_CHECKING:
+    from typing import Any, Iterable
+
     from anndata import AnnData
 
 EPSILON = np.finfo(np.float32).eps
 
 
-def shape_checker(arg_name: str, arg, allowed_shape):
+def shape_checker(
+    arg_name: str, arg: np.ndarray | pd.DataFrame, allowed_shape: tuple[int, ...]
+) -> None:
     """
     A helper function to test the shape of a numpy ndarray or pandas dataframe.
 
@@ -33,7 +37,7 @@ def shape_checker(arg_name: str, arg, allowed_shape):
         raise ValueError(f"The shape of '{arg_name}' has to be {allowed_shape}.")
 
 
-def type_checker(arg_name: str, arg, allowed_types):
+def type_checker(arg_name: str, arg: Any, allowed_types: type | Iterable[type]) -> None:
     """
     A helper function to test the type of an argument.
 
@@ -53,7 +57,7 @@ def type_checker(arg_name: str, arg, allowed_types):
         raise TypeError(f"The type of '{arg_name}' has to be one of {allowed_types}.")
 
 
-def value_checker(arg_name: str, arg, allowed_values):
+def value_checker(arg_name: str, arg: Any, allowed_values: Iterable[Any]) -> None:
     """
     A helper function to test the value of an argument.
 
@@ -66,7 +70,7 @@ def value_checker(arg_name: str, arg, allowed_values):
     allowed_values:
         A value or list of values allowed for 'arg'
     """
-    if not isinstance(allowed_values, list):
+    if isinstance(allowed_values, type):
         allowed_values = [allowed_values]
 
     if arg not in allowed_values:
@@ -102,12 +106,14 @@ def _get_basis_obsp(adata: AnnData, basis: str) -> np.ndarray:
 
 
 @njit
-def normalize_WH(W, H):
+def normalize_WH(W: np.ndarray, H: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     normalization_factor = np.sum(W, axis=0)
     return W / normalization_factor, H * normalization_factor[:, None]
 
 
-def match_to_catalog(signatures: pd.DataFrame, catalog: pd.DataFrame, metric="cosine"):
+def match_to_catalog(
+    signatures: pd.DataFrame, catalog: pd.DataFrame, metric="cosine"
+) -> pd.DataFrame:
     """
     Find the best matching signatures in catalog for all signatures.
     """
@@ -118,8 +124,8 @@ def match_to_catalog(signatures: pd.DataFrame, catalog: pd.DataFrame, metric="co
 
 
 def match_signatures_pair(
-    signatures1: pd.DataFrame, signatures2: pd.DataFrame, metric="cosine"
-):
+    signatures1: pd.DataFrame, signatures2: pd.DataFrame, metric: str = "cosine"
+) -> np.ndarray:
     """
     Match a pair of signature catalogs using their pairwise distances,
     see https://en.wikipedia.org/wiki/Assignment_problem.
