@@ -349,8 +349,8 @@ def _barplot_single(
     Plot the relative values of a non-negative dataframe
     with a single row.
 
-    Inputs:
-    -------
+    Inputs
+    ------
     data: pd.DataFrame
         A dataframe with only one row, typically a single signature
         or the feature counts of a single sample.
@@ -416,8 +416,8 @@ def _barplot_matched(
     with a single row.
     The closest matching row from a 'catalog' can also be plotted.
 
-    Inputs:
-    -------
+    Inputs
+    ------
     data: pd.DataFrame
         A dataframe with only one row, typically a single mutational
         signature.
@@ -481,8 +481,8 @@ def barplot_pandas(
     Plot the relative values of the rows of a non-negative dataframe.
     The closest matching rows from a 'catalog' can also be plotted.
 
-    Inputs:
-    -------
+    Inputs
+    ------
     data : pd.DataFrame
         Annotated dataframe of shape (n_obs, n_vars), typically
         a collection of mutational signatures.
@@ -552,8 +552,8 @@ def _get_obs_order(data: pd.DataFrame, normalize: bool = True) -> np.ndarray:
     of a non-negative data array of shape (n_obs, n_dimensions) for a
     stacked barchart using hierarchical clustering.
 
-    Parameters
-    ----------
+    Inputs
+    ------
     data : pd.DataFrame of shape (n_obs, n_dimensions)
         An annotated non-negative data matrix, typically the signature
         exposures.
@@ -590,8 +590,8 @@ def _reorder_data(
     Reorder non-negative data using hierarchical clustering and optionally
     reorder the dimensions by their total relative sums.
 
-    Parameters
-    ----------
+    Inputs
+    ------
     data : pd.DataFrame of shape (n_obs, n_dimensions)
         An annotated non-negative data matrix, typically the signature
         exposures.
@@ -641,8 +641,8 @@ def stacked_barplot(
     Visualize non-negative data with a stacked bar chart, typically
     the signature exposures.
 
-    Parameter
-    ---------
+    Inputs
+    ------
     data : pd.DataFrame of shape (n_obs, n_dimensions)
         An annotated non-negative data matrix, typically the signature
         exposures.
