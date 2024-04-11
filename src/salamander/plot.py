@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Iterable
 
-import fastcluster  # type: ignore
+import fastcluster
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from adjustText import adjust_text  # type: ignore
+from adjustText import adjust_text
+from matplotlib.axes import Axes
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import pdist
 
@@ -17,8 +18,9 @@ from .consts import COLORS_INDEL83, COLORS_SBS96, INDEL_TYPES_83, SBS_TYPES_96
 from .utils import _get_basis_obsm, _get_basis_obsp, match_to_catalog, value_checker
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from anndata import AnnData
-    from matplotlib.axes import Axes
     from matplotlib.colors import Colormap
     from matplotlib.typing import ColorType
     from seaborn.matrix import ClusterGrid
@@ -33,10 +35,8 @@ def set_salamander_style():
         "axes.spines.top": False,
         "axes.spines.right": False,
         "axes.titlesize": "large",
-        "errorbar.capsize": 3,
         "font.family": "DejaVu Sans",
         "legend.fontsize": "medium",
-        "lines.markersize": 8,
         "pdf.fonttype": 42,
         "xtick.labelsize": "small",
         "ytick.labelsize": "small",
@@ -44,7 +44,7 @@ def set_salamander_style():
     mpl.rcParams.update(params)
 
 
-def history_plot(
+def history(
     values: np.ndarray,
     conv_test_freq: int,
     min_iteration: int = 0,
@@ -153,7 +153,7 @@ def _scatter_2d(
     return ax
 
 
-def _scatter(
+def scatter_numpy(
     data: np.ndarray,
     xlabel: str | None = None,
     ylabel: str | None = None,
@@ -197,7 +197,21 @@ def scatter(adata: AnnData, x: str, y: str | None = None, **kwargs) -> Axes:
     else:
         data = adata.obs[[x, y]].to_numpy()
 
-    ax = _scatter(data, xlabel=x, ylabel=y, **kwargs)
+    ax = scatter_numpy(data, xlabel=x, ylabel=y, **kwargs)
+    return ax
+
+
+def embedding_numpy(
+    data: np.ndarray,
+    dimensions: tuple[int, int] = (0, 1),
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    **kwargs,
+):
+    if data.ndim == 2 and data.shape[1] > 2:
+        data = data[:, dimensions]
+
+    ax = scatter_numpy(data, xlabel=xlabel, ylabel=ylabel, **kwargs)
     return ax
 
 
@@ -220,13 +234,10 @@ def embedding(
     dimensions: tuple[int, int] = (0, 1),
     xlabel: str | None = None,
     ylabel: str | None = None,
+    ticks: bool | None = None,
     **kwargs,
 ) -> Axes:
     data = _get_basis_obsm(adata, basis)
-
-    if data.ndim == 2 and data.shape[1] > 2:
-        data = data[dimensions]
-
     name = _basisobsm2name(basis)
     labels = [f"{name}{d+1}" for d in dimensions]
 
@@ -236,7 +247,12 @@ def embedding(
     if ylabel is None:
         ylabel = labels[1]
 
-    ax = _scatter(data, xlabel=xlabel, ylabel=ylabel, **kwargs)
+    if ticks is None:
+        ticks = False if basis in ["tsne", "umap"] else True
+
+    ax = embedding_numpy(
+        data, dimensions=dimensions, xlabel=xlabel, ylabel=ylabel, ticks=ticks, **kwargs
+    )
     return ax
 
 
@@ -245,14 +261,14 @@ def pca(adata: AnnData, **kwargs) -> Axes:
 
 
 def tsne(adata: AnnData, **kwargs) -> Axes:
-    return embedding(adata, basis="tsne", ticks=False, **kwargs)
+    return embedding(adata, basis="tsne", **kwargs)
 
 
 def umap(adata: AnnData, **kwargs) -> Axes:
-    return embedding(adata, basis="umap", ticks=False, **kwargs)
+    return embedding(adata, basis="umap", **kwargs)
 
 
-def _correlation(
+def correlation_pandas(
     corr: pd.DataFrame,
     figsize: tuple[float, float] = (4.0, 4.0),
     cmap: Colormap | str | None = "vlag",
@@ -279,7 +295,7 @@ def correlation(adata: AnnData, **kwargs) -> ClusterGrid:
         index=adata.obs_names,
         columns=adata.obs_names,
     )
-    return _correlation(corr, **kwargs)
+    return correlation_pandas(corr, **kwargs)
 
 
 def _get_colors_barplot(var_names, colors=None):
@@ -453,7 +469,7 @@ def _barplot_matched(
     return axes
 
 
-def _barplot(
+def barplot_pandas(
     data: pd.DataFrame,
     catalog: pd.DataFrame | None = None,
     colors: ColorType | list[ColorType] | None = None,
@@ -527,7 +543,7 @@ def _barplot(
 
 
 def barplot(adata: AnnData, **kwargs):
-    return _barplot(adata.to_df(), **kwargs)
+    return barplot_pandas(adata.to_df(), **kwargs)
 
 
 def _get_obs_order(data: pd.DataFrame, normalize: bool = True) -> np.ndarray:
