@@ -79,7 +79,11 @@ def umap(adata: AnnData, basis: str, **kwargs) -> None:
 
 
 def _reduce_dimension(
-    data: np.ndarray, method: str = "umap", normalize: bool = False, **kwargs
+    data: np.ndarray,
+    method: str = "umap",
+    n_components: int = 2,
+    normalize: bool = False,
+    **kwargs,
 ) -> np.ndarray:
     value_checker("method", method, ["pca", "tsne", "umap"])
 
@@ -97,17 +101,17 @@ def _reduce_dimension(
         return data
 
     if method == "pca":
-        data_reduced_dim = _pca(data, **kwargs)
+        data_reduced_dim = _pca(data, n_components=n_components, **kwargs)
     elif method == "tsne":
-        data_reduced_dim = _tsne(data, **kwargs)
+        data_reduced_dim = _tsne(data, n_components=n_components, **kwargs)
     else:
-        data_reduced_dim = _umap(data, **kwargs)
+        data_reduced_dim = _umap(data, n_components=n_components, **kwargs)
 
     return data_reduced_dim
 
 
 def reduce_dimension(
-    adata: AnnData, basis: str, method="umap", normalize: bool = False, **kwargs
+    adata: AnnData, basis: str, method="umap", n_components: int = 2, **kwargs
 ) -> None:
     """
     Compute and store a dimensionality reduction of the multi-dimensional
@@ -125,7 +129,7 @@ def reduce_dimension(
         return
 
     adata.obsm[f"X_{method}"] = _reduce_dimension(
-        data, method=method, normalize=normalize, **kwargs
+        data, method=method, n_components=n_components, **kwargs
     )
 
 
