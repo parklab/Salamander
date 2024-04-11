@@ -83,7 +83,7 @@ def _annotate_plot(
     adjust_annotations: bool = True,
     adjust_kwargs: dict[str, Any] | None = None,
     **kwargs,
-):
+) -> None:
     for data_point, annotation in zip(data, annotations):
         ax.text(
             data_point[0],
@@ -207,7 +207,7 @@ def embedding_numpy(
     xlabel: str | None = None,
     ylabel: str | None = None,
     **kwargs,
-):
+) -> Axes:
     if data.ndim == 2 and data.shape[1] > 2:
         data = data[:, dimensions]
 
@@ -542,7 +542,7 @@ def barplot_pandas(
     return axes
 
 
-def barplot(adata: AnnData, **kwargs):
+def barplot(adata: AnnData, **kwargs) -> Axes | Iterable[Axes]:
     return barplot_pandas(adata.to_df(), **kwargs)
 
 
