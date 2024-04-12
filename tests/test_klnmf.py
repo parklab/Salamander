@@ -1,9 +1,9 @@
 import pickle
 
-import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from anndata import AnnData
 
 from salamander.nmf_framework import klnmf
 from salamander.nmf_framework.standard_nmf import _DEFAULT_GIVEN_PARAMETERS
@@ -15,7 +15,7 @@ PATH_TEST_DATA = f"{PATH}/nmf_framework/klnmf"
 @pytest.fixture
 def adata():
     counts = pd.read_csv(f"{PATH_TEST_DATA}/counts.csv", index_col=0)
-    adata = ad.AnnData(counts.T)
+    adata = AnnData(counts.T)
     return adata
 
 
@@ -31,7 +31,7 @@ def W_init(n_signatures):
 
 @pytest.fixture
 def asignatures_init(W_init, adata):
-    asignatures = ad.AnnData(W_init.T)
+    asignatures = AnnData(W_init.T)
     asignatures.var_names = adata.var_names
     return asignatures
 
