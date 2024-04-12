@@ -521,7 +521,7 @@ class SignatureNMF(ABC):
         if data == "signatures":
             values = values.T
 
-        correlation = tl._correlation(values, **kwargs)
+        correlation = tl.correlation_numpy(values, **kwargs)
 
         if data == "samples":
             self.adata.obsp["X_correlation"] = correlation

@@ -80,7 +80,7 @@ def umap(adata: AnnData, basis: str, **kwargs) -> None:
     adata.obsm["X_umap"] = _umap(data, **kwargs)
 
 
-def _reduce_dimension(
+def reduce_dimension_numpy(
     data: np.ndarray,
     method: str = "umap",
     n_components: int = 2,
@@ -130,7 +130,7 @@ def reduce_dimension(
         )
         return
 
-    adata.obsm[f"X_{method}"] = _reduce_dimension(
+    adata.obsm[f"X_{method}"] = reduce_dimension_numpy(
         data, method=method, n_components=n_components, **kwargs
     )
 
@@ -153,7 +153,7 @@ def reduce_dimension_multiple(
         )
         return
 
-    data_reduced_dim = _reduce_dimension(data, method=method, **kwargs)
+    data_reduced_dim = reduce_dimension_numpy(data, method=method, **kwargs)
     sum_n_obs = 0
 
     for adata in adatas:
@@ -162,7 +162,7 @@ def reduce_dimension_multiple(
         sum_n_obs += n_obs
 
 
-def _correlation(data: np.ndarray, **kwargs) -> np.ndarray:
+def correlation_numpy(data: np.ndarray, **kwargs) -> np.ndarray:
     """
     Compute the correlation of the rows of the data.
     """
@@ -175,4 +175,4 @@ def correlation(adata: AnnData, basis: str, **kwargs) -> None:
     observation annotations named 'basis'.
     """
     data = _get_basis_obsm(adata, basis)
-    adata.obsp["X_correlation"] = _correlation(data, **kwargs)
+    adata.obsp["X_correlation"] = correlation_numpy(data, **kwargs)
