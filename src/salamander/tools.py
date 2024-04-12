@@ -27,7 +27,7 @@ def pca(adata: AnnData, basis: str, **kwargs) -> None:
     observation annotations named 'basis'.
     """
     data = _get_basis_obsm(adata, basis)
-    adata.obsm[f"X_pca"] = _pca(data, **kwargs)
+    adata.obsm["X_pca"] = _pca(data, **kwargs)
 
 
 def _tsne(
@@ -51,7 +51,7 @@ def tsne(adata: AnnData, basis: str, **kwargs) -> None:
     observation annotations named 'basis'.
     """
     data = _get_basis_obsm(adata, basis)
-    adata.obsm[f"X_tsne"] = _tsne(data, **kwargs)
+    adata.obsm["X_tsne"] = _tsne(data, **kwargs)
 
 
 def _umap(
@@ -77,7 +77,7 @@ def umap(adata: AnnData, basis: str, **kwargs) -> None:
     observation annotations named 'basis'.
     """
     data = _get_basis_obsm(adata, basis)
-    adata.obsm[f"X_umap"] = _umap(data, **kwargs)
+    adata.obsm["X_umap"] = _umap(data, **kwargs)
 
 
 def _reduce_dimension(
@@ -175,4 +175,4 @@ def correlation(adata: AnnData, basis: str, **kwargs) -> None:
     observation annotations named 'basis'.
     """
     data = _get_basis_obsm(adata, basis)
-    adata.obsp[f"X_correlation"] = _correlation(data, **kwargs)
+    adata.obsp["X_correlation"] = _correlation(data, **kwargs)
