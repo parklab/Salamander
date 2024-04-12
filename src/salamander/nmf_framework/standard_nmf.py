@@ -1,20 +1,17 @@
 from __future__ import annotations
 
 import warnings
-from abc import abstractmethod
 from typing import TYPE_CHECKING
 
 import anndata as ad
-import numpy as np
-import pandas as pd
 
 from .. import tools as tl
-from ..utils import _get_basis_obsm, match_signatures_pair, type_checker
+from ..utils import match_signatures_pair, type_checker
 from .initialization import initialize
-from .signature_nmf import SignatureNMF, _Dim_reduction_methods
+from .signature_nmf import SignatureNMF
 
 if TYPE_CHECKING:
-    from typing import Any, Literal
+    from typing import Any
 
     from .signature_nmf import _Dim_reduction_methods
 
@@ -65,7 +62,8 @@ class StandardNMF(SignatureNMF):
         for parameter in given_parameters:
             if parameter not in _PARAMETERS_NAMES:
                 raise ValueError(
-                    f"The given parameters include parameters outside of {_PARAMETERS_NAMES}."
+                    "The given parameters include parameters outside "
+                    f"of {_PARAMETERS_NAMES}."
                 )
 
         given_asignatures = given_parameters["asignatures"]
