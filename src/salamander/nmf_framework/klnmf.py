@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
 
 from ..utils import shape_checker, type_checker
 from . import _utils_klnmf
@@ -135,7 +134,8 @@ class KLNMF(StandardNMF):
         for kwarg in fitting_kwargs:
             if kwarg not in _FITTING_KWARGS:
                 raise ValueError(
-                    f"The given fitting keyword arguments include parameters outside of {_FITTING_KWARGS}."
+                    "The given fitting keyword arguments include parameters "
+                    f"outside of {_FITTING_KWARGS}."
                 )
 
         for name, weights in fitting_kwargs.items():
