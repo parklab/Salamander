@@ -3,16 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
 from numba import njit
 
 from ..utils import normalize_WH
-from ._utils_klnmf import kl_divergence, poisson_llh, samplewise_kl_divergence, update_H
-from .initialization import EPSILON, _Init_methods
+from ._utils_klnmf import kl_divergence, samplewise_kl_divergence, update_H
+from .initialization import EPSILON
 from .standard_nmf import StandardNMF
 
 if TYPE_CHECKING:
-    from typing import Literal
+    from typing import Any, Literal
 
     from .initialization import _Init_methods
 
@@ -137,14 +136,14 @@ class MvNMF(StandardNMF):
         )
         self.lam = lam
         self.delta = delta
-        self._gamma = None
+        self._gamma = 1.0
 
     def compute_reconstruction_errors(self) -> None:
         """
         Add the samplewise Kullback-Leibler divergences
         as observation annotations to the AnnData count data.
         """
-        errors = _utils_klnmf.samplewise_kl_divergence(
+        errors = samplewise_kl_divergence(
             self.adata.X.T, self.asignatures.X.T, self.adata.obsm["exposures"].T
         )
         self.adata.obs["reconstruction_error"] = errors
