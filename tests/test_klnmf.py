@@ -72,8 +72,8 @@ class TestUpdatesKLNMF:
     def test_update_parameters(self, model_init, WH_updated):
         model_init._update_parameters(given_parameters=_DEFAULT_GIVEN_PARAMETERS)
         W_updated, H_updated = WH_updated
-        assert np.allclose(model_init.asignatures.X.T, W_updated)
-        assert np.allclose(model_init.adata.obsm["exposures"].T, H_updated)
+        assert np.allclose(model_init.asignatures.X, W_updated.T)
+        assert np.allclose(model_init.adata.obsm["exposures"], H_updated.T)
 
     def test_given_signatures(self, n_signatures, adata):
         for n_given_signatures in range(1, n_signatures + 1):
