@@ -61,7 +61,7 @@ def _umap(
     min_dist: float = 0.1,
     **kwargs,
 ) -> np.ndarray:
-    import umap
+    import umap  # pylint: disable=redefined-outer-name
 
     n_neighbors = min(n_neighbors, len(data) - 1.0)
     data_reduced_dim = umap.UMAP(
