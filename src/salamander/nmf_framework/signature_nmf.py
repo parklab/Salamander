@@ -226,7 +226,7 @@ class SignatureNMF(ABC):
 
     @property
     def data_reconstructed(self) -> pd.DataFrame:
-        if not "X_reconstructed" in self.adata.obsm:
+        if "X_reconstructed" not in self.adata.obsm:
             self.compute_reconstruction()
 
         return pd.DataFrame(
@@ -248,7 +248,7 @@ class SignatureNMF(ABC):
         The total reconstruction error between the data and
         the reconstructed data.
         """
-        if not "reconstruction_error" in self.adata.obs:
+        if "reconstruction_error" not in self.adata.obs:
             self.compute_reconstruction_errors()
 
         return np.sum(self.adata.obs["reconstruction_error"])
@@ -512,11 +512,10 @@ class SignatureNMF(ABC):
         respective anndata object.
         """
         value_checker("data", data, ["samples", "signatures"])
-
-        assert (
-            "exposures" in self.adata.obsm
-        ), "Computing the sample or signature correlation requires fitting the NMF model."
-
+        assert "exposures" in self.adata.obsm, (
+            "Computing the sample or signature correlation "
+            "requires fitting the NMF model."
+        )
         values = self.adata.obsm["exposures"]
 
         if data == "signatures":
