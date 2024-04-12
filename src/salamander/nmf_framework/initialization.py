@@ -176,8 +176,9 @@ def initialize(
         W, H = init_flat(X, n_signatures)
 
     elif init_method in ["nndsvd", "nndsvda", "nndsvdar"]:
-        # mypy does not recognize that init_method is compatible with Literal["nndsvd", "nndsvda", "nndsvdar"]
-        W, H = init_nndsvd(X, n_signatures, init=init_method, **kwargs)  # type: ignore[arg-type]
+        # mypy does not recognize that init_method is compatible
+        # with Literal["nndsvd", "nndsvda", "nndsvdar"]
+        W, H = init_nndsvd(X, n_signatures, init=init_method, **kwargs)  # type: ignore[arg-type] # noqa: E501
 
     elif init_method == "random":
         W, H = init_random(X, n_signatures, **kwargs)
