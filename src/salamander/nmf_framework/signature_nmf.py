@@ -281,32 +281,6 @@ class SignatureNMF(ABC):
         self.adata = adata
         self.adata.X = self.adata.X.clip(EPSILON)
 
-    def _check_given_asignatures(self, given_asignatures: AnnData) -> None:
-        """
-        Check if the given signatures are compatible with the
-        number of signatures of the algorithm and the
-        mutation types of the input data.
-        Should be called by implementations of _initialize.
-
-        Inputs
-        ------
-        given_asignatures: AnnData
-            Known signatures that should be fixed by the algorithm.
-            The number of known signatures can be less or equal to the
-            number of signatures specified by the algorithm.
-        """
-        type_checker("given_asignatures", given_asignatures, AnnData)
-        given_mutation_types = given_asignatures.var_names.to_numpy(dtype=str)
-        compatible = (
-            np.array_equal(given_mutation_types, self.mutation_types)
-            and given_asignatures.n_obs <= self.n_signatures
-        )
-        if not compatible:
-            raise ValueError(
-                f"You have to provide at most {self.n_signatures} signatures with "
-                "mutation types matching to your data."
-            )
-
     @abstractmethod
     def _initialize(
         self,

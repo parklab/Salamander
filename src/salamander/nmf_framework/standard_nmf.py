@@ -7,6 +7,7 @@ import anndata as ad
 
 from .. import tools as tl
 from ..utils import match_signatures_pair, type_checker
+from ._utils_klnmf import check_given_asignatures
 from .initialization import initialize
 from .signature_nmf import SignatureNMF
 
@@ -69,7 +70,7 @@ class StandardNMF(SignatureNMF):
         given_asignatures = given_parameters["asignatures"]
 
         if given_asignatures is not None:
-            self._check_given_asignatures(given_asignatures)
+            check_given_asignatures(self.adata, given_asignatures, self.n_signatures)
             given_signatures = given_asignatures.to_df().T
 
         init_kwargs = {} if init_kwargs is None else init_kwargs.copy()
