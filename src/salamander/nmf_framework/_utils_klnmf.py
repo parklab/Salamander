@@ -164,7 +164,7 @@ def poisson_llh(X: np.ndarray, W: np.ndarray, H: np.ndarray) -> float:
 
 
 def check_given_asignatures(
-    adata: AnnData, given_asignatures: AnnData, n_signatures_model: int
+    given_asignatures: AnnData, mutation_types_data: np.ndarray, n_signatures_model: int
 ) -> None:
     """
     Check if the given signatures are compatible with
@@ -174,25 +174,24 @@ def check_given_asignatures(
 
     Inputs
     ------
-    given_adata: AnnData
-        Data with mutation types annotations.
-
     given_asignatures: AnnData
         Known signatures that should be fixed by the algorithm.
+
+    mutation_types_data: np.ndarray
+        The expected mutation types.
 
     n_signatures_model: int
         The number of signatures of the NMF model.
     """
     type_checker("given_asignatures", given_asignatures, AnnData)
-    mutation_types = adata.var_names.to_numpy(dtype=str)
     given_mutation_types = given_asignatures.var_names.to_numpy(dtype=str)
     compatible = (
-        np.array_equal(mutation_types, given_mutation_types)
+        np.array_equal(mutation_types_data, given_mutation_types)
         and given_asignatures.n_obs <= n_signatures_model
     )
     if not compatible:
         raise ValueError(
-            "The given signatures are not compatible with the NMF model or the data. "
+            "The given signatures are incompatible with the data or the model. "
             f"You have to provide at most {n_signatures_model} signatures with "
             "mutation types matching to your data."
         )

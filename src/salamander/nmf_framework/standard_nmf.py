@@ -70,7 +70,9 @@ class StandardNMF(SignatureNMF):
         given_asignatures = given_parameters["asignatures"]
 
         if given_asignatures is not None:
-            check_given_asignatures(self.adata, given_asignatures, self.n_signatures)
+            check_given_asignatures(
+                given_asignatures, self.mutation_types, self.n_signatures
+            )
             given_signatures = given_asignatures.to_df().T
 
         init_kwargs = {} if init_kwargs is None else init_kwargs.copy()
