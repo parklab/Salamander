@@ -10,7 +10,7 @@ from anndata import AnnData
 
 from .. import plot as pl
 from .. import tools as tl
-from ..utils import type_checker, value_checker
+from ..utils import match_signatures_pair, type_checker, value_checker
 from .initialization import _INIT_METHODS, EPSILON
 
 if TYPE_CHECKING:
@@ -386,7 +386,7 @@ class SignatureNMF(ABC):
 
     def reorder(
         self,
-        asignatures_other: ad.AnnData,
+        asignatures_other: AnnData,
         metric: str = "cosine",
     ) -> None:
         """

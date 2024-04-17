@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import anndata as ad
 
 from .. import tools as tl
-from ..utils import match_signatures_pair, type_checker
+from ..utils import type_checker
 from ._utils_klnmf import check_given_asignatures
 from .initialization import initialize
 from .signature_nmf import SignatureNMF
