@@ -100,19 +100,6 @@ class StandardNMF(SignatureNMF):
         self.adata.obsm["exposures"] = H.T
         return given_parameters
 
-    def reorder(
-        self,
-        asignatures_other: ad.AnnData,
-        metric: str = "cosine",
-    ) -> None:
-        reordered_indices = match_signatures_pair(
-            asignatures_other.to_df().T, self.asignatures.to_df().T, metric=metric
-        )
-        self.asignatures = self.asignatures[reordered_indices, :].copy()
-        self.adata.obsm["exposures"] = self.adata.obsm["exposures"][
-            :, reordered_indices
-        ]
-
     def reduce_dimension_embeddings(
         self, method: _Dim_reduction_methods = "umap", n_components: int = 2, **kwargs
     ) -> None:

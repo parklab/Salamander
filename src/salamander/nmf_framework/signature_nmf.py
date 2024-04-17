@@ -384,12 +384,22 @@ class SignatureNMF(ABC):
 
         return self
 
-    @abstractmethod
-    def reorder(self, asignatures_other: AnnData) -> None:
+    def reorder(
+        self,
+        asignatures_other: ad.AnnData,
+        metric: str = "cosine",
+    ) -> None:
         """
         Reorder the model parameters to match the order of another
         collection of signatures.
         """
+        reordered_indices = match_signatures_pair(
+            asignatures_other.to_df().T, self.asignatures.to_df().T, metric=metric
+        )
+        self.asignatures = self.asignatures[reordered_indices, :].copy()
+        self.adata.obsm["exposures"] = self.adata.obsm["exposures"][
+            :, reordered_indices
+        ]
 
     def plot_history(self, outfile: str | None = None, **kwargs) -> Axes:
         """
