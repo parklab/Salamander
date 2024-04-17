@@ -218,11 +218,7 @@ def _basisobsm2name(basis: str) -> str:
     name = (
         "PC"
         if basis == "pca"
-        else "tSNE"
-        if basis == "tsne"
-        else "UMAP"
-        if basis == "umap"
-        else basis
+        else "tSNE" if basis == "tsne" else "UMAP" if basis == "umap" else basis
     )
     return name
 
