@@ -14,7 +14,7 @@ repos:
       - id: poetry-check
       - id: poetry-lock
   - repo: https://github.com/psf/black
-    rev: 23.9.0
+    rev: 24.3.0
     hooks:
       - id: black
   - repo: https://github.com/PyCQA/isort
