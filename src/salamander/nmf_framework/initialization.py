@@ -1,6 +1,7 @@
 """
 Initialization methods for non-negative matrix factorization (NMF)
 """
+
 from __future__ import annotations
 
 from typing import Literal, get_args

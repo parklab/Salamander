@@ -2,6 +2,7 @@
 Salamander: a non-negative matrix factorization framework for signature analysis
 ================================================================================
 """
+
 # from .nmf_framework.klnmf import KLNMF
 from .plot import set_salamander_style
 
