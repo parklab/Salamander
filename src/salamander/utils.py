@@ -16,6 +16,29 @@ if TYPE_CHECKING:
 EPSILON = np.finfo(np.float32).eps
 
 
+def dict_checker(
+    dict_name: str, dictionary: dict[Any, Any], valid_keys: list[Any]
+) -> None:
+    """
+    A helper function to test the keys of a dictionary.
+
+    Input:
+    ------
+    dict_name: str
+        The name of the dictionary
+
+    dictionary: dict[Any, Any]
+
+    valid_keys: list[Any]
+        The allowed keys of 'dictionary'
+    """
+    type_checker(dict_name, dictionary, dict)
+
+    for key in dictionary.keys():
+        if key not in valid_keys:
+            raise ValueError(f"'{dict_name}' includes keys outside of {valid_keys}.")
+
+
 def shape_checker(
     arg_name: str, arg: np.ndarray | pd.DataFrame, allowed_shape: tuple[int, ...]
 ) -> None:

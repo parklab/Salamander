@@ -6,7 +6,6 @@ import pytest
 from anndata import AnnData
 
 from salamander.nmf_framework import klnmf
-from salamander.nmf_framework.standard_nmf import _DEFAULT_GIVEN_PARAMETERS
 
 PATH = "tests/test_data"
 PATH_TEST_DATA = f"{PATH}/nmf_framework/klnmf"
@@ -70,7 +69,7 @@ class TestUpdatesKLNMF:
         return WH_updated
 
     def test_update_parameters(self, model_init, WH_updated):
-        model_init._update_parameters(given_parameters=_DEFAULT_GIVEN_PARAMETERS)
+        model_init._update_parameters()
         W_updated, H_updated = WH_updated
         assert np.allclose(model_init.asignatures.X, W_updated.T)
         assert np.allclose(model_init.adata.obsm["exposures"], H_updated.T)

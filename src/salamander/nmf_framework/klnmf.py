@@ -85,11 +85,14 @@ class KLNMF(StandardNMF):
     def objective(self) -> Literal["minimize", "maximize"]:
         return "minimize"
 
-    def _update_parameters(self, given_parameters: dict[str, Any]) -> None:
-        given_asignatures = given_parameters["asignatures"]
+    def _update_parameters(
+        self, given_parameters: dict[str, Any] | None = None
+    ) -> None:
+        if given_parameters is None:
+            given_parameters = {}
 
-        if given_asignatures is not None:
-            n_given_signatures = given_asignatures.n_obs
+        if "asignatures" in given_parameters:
+            n_given_signatures = given_parameters["asignatures"].n_obs
         else:
             n_given_signatures = 0
 

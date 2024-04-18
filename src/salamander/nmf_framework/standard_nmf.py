@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING
 import anndata as ad
 
 from .. import tools as tl
-from ..utils import type_checker
-from ._utils_klnmf import check_given_asignatures
+from ._utils_klnmf import check_given_parameters
 from .initialization import initialize
 from .signature_nmf import SignatureNMF
 
@@ -15,9 +14,6 @@ if TYPE_CHECKING:
     from typing import Any
 
     from .signature_nmf import _Dim_reduction_methods
-
-_PARAMETERS_NAMES = ["asignatures", "exposures"]
-_DEFAULT_GIVEN_PARAMETERS = {parameter: None for parameter in _PARAMETERS_NAMES}
 
 
 class StandardNMF(SignatureNMF):
@@ -52,30 +48,19 @@ class StandardNMF(SignatureNMF):
             Any further keywords arguments to be passed to the initialization method.
             This includes, for example, an optional 'seed' for all stochastic methods.
         """
-        if given_parameters is None:
-            given_parameters = _DEFAULT_GIVEN_PARAMETERS
-            given_signatures = None
-        else:
-            given_parameters = given_parameters.copy()
-
-        type_checker("given_parameters", given_parameters, dict)
-
-        for parameter in given_parameters:
-            if parameter not in _PARAMETERS_NAMES:
-                raise ValueError(
-                    "The given parameters include parameters outside "
-                    f"of {_PARAMETERS_NAMES}."
-                )
-
-        given_asignatures = given_parameters["asignatures"]
-
-        if given_asignatures is not None:
-            check_given_asignatures(
-                given_asignatures, self.mutation_types, self.n_signatures
-            )
-            given_signatures = given_asignatures.to_df().T
-
+        given_parameters = check_given_parameters(
+            given_parameters=given_parameters,
+            mutation_types_data=self.mutation_types,
+            n_signatures_model=self.n_signatures,
+        )
         init_kwargs = {} if init_kwargs is None else init_kwargs.copy()
+
+        if "asignatures" in given_parameters:
+            given_asignatures = given_parameters["asignatures"]
+            given_signatures = given_asignatures.to_df().T
+        else:
+            given_signatures = None
+
         # initialize takes counts X of shape (n_features, n_samples),
         # and given_signatures of shape (n_features, n_given_signatures)
         W, H, signature_names = initialize(
@@ -90,7 +75,7 @@ class StandardNMF(SignatureNMF):
         self.asignatures.var_names = self.mutation_types
 
         # keep signature annotations
-        if given_asignatures is not None:
+        if "asignatures" in given_parameters:
             n_given_signatures = given_asignatures.n_obs
             asignatures_new = self.asignatures[n_given_signatures:, :]
             self.asignatures = ad.concat(

@@ -166,7 +166,7 @@ class MvNMF(StandardNMF):
             self.adata.X.T, self.asignatures.X.T, self.adata.obsm["exposures"].T
         ).T
 
-    def _update_W_unconstrained(self, n_given_signatures: int) -> np.ndarray:
+    def _update_W_unconstrained(self, n_given_signatures: int = 0) -> np.ndarray:
         return update_W_unconstrained(
             self.adata.X.T,
             self.asignatures.X.T,
@@ -189,22 +189,27 @@ class MvNMF(StandardNMF):
         self.asignatures.X = W.T
         self.adata.obsm["exposures"] = H.T
 
-    def _update_W(self, n_given_signatures: int) -> None:
+    def _update_W(self, n_given_signatures: int = 0) -> None:
+        if n_given_signatures == self.n_signatures:
+            return
+
         W_unconstrained = self._update_W_unconstrained(n_given_signatures)
         self._line_search(W_unconstrained)
 
-    def _update_parameters(self, given_parameters: dict[str, Any]) -> None:
-        given_asignatures = given_parameters["asignatures"]
-
-        if given_asignatures is not None:
-            n_given_signatures = given_asignatures.n_obs
-        else:
-            n_given_signatures = 0
+    def _update_parameters(
+        self, given_parameters: dict[str, Any] | None = None
+    ) -> None:
+        if given_parameters is None:
+            given_parameters = {}
 
         self._update_H()
 
-        if n_given_signatures < self.n_signatures:
-            self._update_W(n_given_signatures)
+        if "asignatures" in given_parameters:
+            n_given_signatures = given_parameters["asignatures"].n_obs
+        else:
+            n_given_signatures = 0
+
+        self._update_W(n_given_signatures)
 
     def _setup_fitting_parameters(
         self, fitting_kwargs: dict[str, Any] | None = None

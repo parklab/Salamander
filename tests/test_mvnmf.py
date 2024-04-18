@@ -68,7 +68,7 @@ class TestUpdatesMVNMF:
         return np.load(f"{PATH_TEST_DATA}/H_updated_nsigs{n_signatures}.npy")
 
     def test_update_W(self, model_init, W_updated):
-        model_init._update_W(n_given_signatures=0)
+        model_init._update_W()
         assert np.allclose(model_init.asignatures.X, W_updated.T)
 
     def test_update_H(self, model_init, H_updated):

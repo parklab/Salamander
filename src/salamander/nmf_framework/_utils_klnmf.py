@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from anndata import AnnData
 from numba import njit
 from scipy.special import gammaln
 
-from ..utils import type_checker
+from ..utils import dict_checker, type_checker
+
+if TYPE_CHECKING:
+    from typing import Any
 
 EPSILON = np.finfo(np.float32).eps
+GIVEN_PARAMETERS_ALLOWED = ["asignatures"]
 
 
 @njit(fastmath=True)
@@ -195,6 +201,22 @@ def check_given_asignatures(
             f"You have to provide at most {n_signatures_model} signatures with "
             "mutation types matching to your data."
         )
+
+
+def check_given_parameters(
+    given_parameters: dict[str, Any] | None,
+    mutation_types_data: np.ndarray,
+    n_signatures_model: int,
+) -> dict[str, Any]:
+    given_parameters = {} if given_parameters is None else given_parameters.copy()
+    dict_checker("given_parameters", given_parameters, GIVEN_PARAMETERS_ALLOWED)
+
+    if "asignatures" in given_parameters:
+        check_given_asignatures(
+            given_parameters["asignatures"], mutation_types_data, n_signatures_model
+        )
+
+    return given_parameters
 
 
 @njit

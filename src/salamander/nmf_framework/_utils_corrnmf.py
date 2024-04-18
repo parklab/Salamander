@@ -6,14 +6,14 @@ import numpy as np
 from numba import njit
 from scipy import optimize
 
-from ..utils import shape_checker, type_checker
+from ..utils import dict_checker, shape_checker, type_checker
 from ._utils_klnmf import check_given_asignatures, poisson_llh
 from .initialization import EPSILON
 
 if TYPE_CHECKING:
     from typing import Any
 
-_PARAMETERS_NAMES = [
+GIVEN_PARAMETERS_ALLOWED = [
     "asignatures",
     "signature_scalings",
     "sample_scalings",
@@ -21,7 +21,6 @@ _PARAMETERS_NAMES = [
     "sample_embeddings",
     "variance",
 ]
-_DEFAULT_GIVEN_PARAMETERS = {parameter: None for parameter in _PARAMETERS_NAMES}
 
 
 @njit
@@ -116,14 +115,7 @@ def check_given_parameters(
     dim_embeddings_model: int,
 ) -> dict[str, Any]:
     given_parameters = {} if given_parameters is None else given_parameters.copy()
-    type_checker("given_parameters", given_parameters, dict)
-
-    for parameter in given_parameters:
-        if parameter not in _PARAMETERS_NAMES:
-            raise ValueError(
-                "The given parameters include parameters outside "
-                f"of {_PARAMETERS_NAMES}."
-            )
+    dict_checker("given_parameters", given_parameters, GIVEN_PARAMETERS_ALLOWED)
 
     if "asignatures" in given_parameters:
         check_given_asignatures(
