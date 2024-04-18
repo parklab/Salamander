@@ -242,41 +242,6 @@ def update_sample_scalings(
 
 
 @njit
-def update_p_unnormalized(
-    signatures_mat: np.ndarray, exposures_mat: np.ndarray
-) -> np.ndarray:
-    """
-    Compute the auxiliary parameters p according to the update rule of CorrNMF.
-    The normalization per mutation type and sample is not performed yet.
-
-    Faster than np.einsum().
-
-    Inputs
-    ------
-    signatures_mat : np.ndarray
-        shape (n_signatures, n_features)
-
-    exposures_mat : np.ndarray
-        shape (n_samples, n_signatures)
-
-    Returns
-    -------
-    aux : np.ndarray
-        shape (n_features, n_signatures, n_samples)
-    """
-    n_signatures, n_features = signatures_mat.shape
-    n_samples = exposures_mat.shape[0]
-    p_unnormalized = np.zeros((n_features, n_signatures, n_samples))
-
-    for v in range(n_features):
-        for k in range(n_signatures):
-            for d in range(n_samples):
-                p_unnormalized[v, k, d] = signatures_mat[k, v] * exposures_mat[d, k]
-
-    return p_unnormalized
-
-
-@njit
 def objective_function_embedding(
     embedding: np.ndarray,
     embeddings_other: np.ndarray,
