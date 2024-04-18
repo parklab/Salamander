@@ -74,13 +74,8 @@ def asignatures_init(
 
 
 @pytest.fixture
-def _p(path_suffix):
-    return np.load(f"{PATH_TEST_DATA}/p_{path_suffix}")
-
-
-@pytest.fixture
-def _aux(adata, _p):
-    return np.einsum("vd,vkd->kd", adata.X.T, _p)
+def _aux(path_suffix):
+    return np.load(f"{PATH_TEST_DATA}/aux_{path_suffix}")
 
 
 @pytest.fixture
