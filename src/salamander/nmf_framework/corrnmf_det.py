@@ -28,18 +28,9 @@ class CorrNMFDet(CorrNMF):
     """
 
     def _compute_aux(self) -> np.ndarray:
-        r"""
-        'aux' is the numpy array of shape (n_signatures, n_samples) given by
-            aux_kd = \sum_v x_vd * p_vkd
-        It can be computed without explicitly storing the parameters p.
-        Notice that 'aux' is sufficient to update all model parameters.
-        There is no need to compute and store p.
-        """
-        error_ratios = self.adata.X / (
-            self.adata.obsm["exposures"] @ self.asignatures.X
+        return _utils_corrnmf.compute_aux(
+            self.adata.X, self.asignatures.X, self.adata.obsm["exposures"]
         )
-        aux = self.adata.obsm["exposures"].T * (self.asignatures.X @ error_ratios.T)
-        return aux
 
     def update_sample_scalings(
         self, given_parameters: dict[str, Any] | None = None

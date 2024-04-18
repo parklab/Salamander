@@ -40,6 +40,33 @@ def compute_exposures(
     ).T
 
 
+@njit
+def compute_aux(
+    data_mat: np.ndarray, signatures_mat: np.ndarray, exposures_mat: np.ndarray
+) -> np.ndarray:
+    r"""
+    'aux' is the numpy array of shape (n_signatures, n_samples) given by
+        aux_kd = \sum_v x_vd * p_vkd
+    It can be computed without explicitly storing the parameters p.
+    Notice that 'aux' is sufficient to update all model parameters.
+    There is no need to compute and store p.
+
+    Inputs
+    ------
+    data_mat : np.ndarray
+        shape (n_samples, n_features)
+
+    signatures_mat : np.ndarray
+        shape (n_signatures, n_features)
+
+    exposures_mat : np.ndarray
+        shape (n_samples, n_signatures)
+    """
+    error_ratios = data_mat / (exposures_mat @ signatures_mat)
+    aux = exposures_mat.T * (signatures_mat @ error_ratios.T)
+    return aux
+
+
 def elbo_corrnmf(
     data_mat: np.ndarray,
     signatures_mat: np.ndarray,
