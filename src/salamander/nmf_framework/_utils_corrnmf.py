@@ -305,7 +305,7 @@ def gradient_embedding(
     scaling: float,
     scalings_other: np.ndarray,
     variance: float,
-    summand_grad,
+    summand_grad: np.ndarray,
     add_penalty: bool = True,
 ) -> np.ndarray:
     r"""
