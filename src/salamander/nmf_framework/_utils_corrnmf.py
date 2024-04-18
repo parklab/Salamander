@@ -4,9 +4,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from numba import njit
+from scipy import optimize
 
 from ..utils import shape_checker, type_checker
 from ._utils_klnmf import check_given_asignatures, poisson_llh
+from .initialization import EPSILON
 
 if TYPE_CHECKING:
     from typing import Any
@@ -162,22 +164,19 @@ def check_given_parameters(
 
 @njit
 def update_signature_scalings(
-    data_mat: np.ndarray,
-    p: np.ndarray,
+    aux: np.ndarray,
     sample_scalings: np.ndarray,
     signature_embeddings: np.ndarray,
     sample_embeddings: np.ndarray,
 ) -> np.ndarray:
-    """
+    r"""
     Compute the new signature scalings according to the update rule of CorrNMF.
 
     Inputs
     ------
-    data_mat : np.ndarray
-        shape (n_samples, n_features)
-
-    p : np.ndarray
-        auxiliary parameters of shape (n_featurues, n_signatures, n_samples)
+    aux : np.ndarray
+        auxiliary parameters of shape (n_signatures, n_samples) with
+        aux[k,d] = \sum_v x_vd p_vkd
 
     sample_scalings : np.ndarray
         shape (n_samples,)
@@ -193,14 +192,7 @@ def update_signature_scalings(
     signature_scalings : np.ndarray
         shape (n_signatures,)
     """
-    n_features, n_signatures, n_samples = p.shape
-    first_sum = np.zeros(n_signatures)
-
-    for k in range(n_signatures):
-        for v in range(n_features):
-            for d in range(n_samples):
-                first_sum[k] += data_mat[d, v] * p[v, k, d]
-
+    first_sum = np.sum(aux, axis=1)
     second_sum = np.sum(
         np.exp(sample_scalings + signature_embeddings @ sample_embeddings.T), axis=1
     )
@@ -466,3 +458,58 @@ def hessian_embedding(
                 hessian[m1, m2] -= 1 / variance
 
     return -hessian
+
+
+def update_embedding(
+    embedding_init: np.ndarray,
+    embeddings_other: np.ndarray,
+    scaling: float,
+    scalings_other: np.ndarray,
+    variance: float,
+    aux_vec: np.ndarray,
+    outer_prods_embeddings_other: np.ndarray,
+    **kwargs,
+) -> np.ndarray:
+    def objective_fun(embedding):
+        return objective_function_embedding(
+            embedding,
+            embeddings_other,
+            scaling,
+            scalings_other,
+            variance,
+            aux_vec,
+        )
+
+    summand_grad = np.sum(aux_vec[:, np.newaxis] * embeddings_other, axis=0)
+
+    def gradient(embedding):
+        return gradient_embedding(
+            embedding,
+            embeddings_other,
+            scaling,
+            scalings_other,
+            variance,
+            summand_grad,
+        )
+
+    def hessian(embedding):
+        return hessian_embedding(
+            embedding,
+            embeddings_other,
+            scaling,
+            scalings_other,
+            variance,
+            outer_prods_embeddings_other,
+        )
+
+    embedding = optimize.minimize(
+        fun=objective_fun,
+        x0=embedding_init,
+        method="Newton-CG",
+        jac=gradient,
+        hess=hessian,
+        **kwargs,
+    ).x
+    embedding[(0 < embedding) & (embedding < EPSILON)] = EPSILON
+    embedding[(-EPSILON < embedding) & (embedding < 0)] = -EPSILON
+    return embedding

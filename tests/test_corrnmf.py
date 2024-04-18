@@ -150,9 +150,9 @@ class TestUpdatesCorrNMFDet:
         assert np.allclose(model_init.asignatures.X, signatures_mat_updated)
 
     def test_update_signature_scalings(
-        self, model_init, _p, signature_scalings_updated
+        self, model_init, _aux, signature_scalings_updated
     ):
-        model_init.update_signature_scalings(_p)
+        model_init.update_signature_scalings(_aux)
         assert np.allclose(
             model_init.asignatures.obs["scalings"].values, signature_scalings_updated
         )
@@ -162,10 +162,6 @@ class TestUpdatesCorrNMFDet:
         assert np.allclose(
             model_init.adata.obs["scalings"].values, sample_scalings_updated
         )
-
-    def test_p(self, model_init, _p):
-        p_computed = model_init.update_p()
-        assert np.allclose(p_computed, _p)
 
     def test_update_signature_embeddings(
         self, model_init, _aux, signature_embeddings_updated

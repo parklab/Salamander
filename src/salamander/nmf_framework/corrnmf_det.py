@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy import optimize
 
 from . import _utils_corrnmf
 from ._utils_klnmf import update_W
@@ -28,6 +27,20 @@ class CorrNMFDet(CorrNMF):
     with Stochastic Variational Inference, 2014
     """
 
+    def _compute_aux(self) -> np.ndarray:
+        r"""
+        'aux' is the numpy array of shape (n_signatures, n_samples) given by
+            aux_kd = \sum_v x_vd * p_vkd
+        It can be computed without explicitly storing the parameters p.
+        Notice that 'aux' is sufficient to update all model parameters.
+        There is no need to compute and store p.
+        """
+        error_ratios = self.adata.X / (
+            self.adata.obsm["exposures"] @ self.asignatures.X
+        )
+        aux = self.adata.obsm["exposures"].T * (self.asignatures.X @ error_ratios.T)
+        return aux
+
     def update_sample_scalings(
         self, given_parameters: dict[str, Any] | None = None
     ) -> None:
@@ -43,15 +56,14 @@ class CorrNMFDet(CorrNMF):
             )
 
     def update_signature_scalings(
-        self, p: np.ndarray, given_parameters: dict[str, Any] | None = None
+        self, aux: np.ndarray, given_parameters: dict[str, Any] | None = None
     ) -> None:
         if given_parameters is None:
             given_parameters = {}
 
         if "signature_scalings" not in given_parameters:
             self.asignatures.obs["scalings"] = _utils_corrnmf.update_signature_scalings(
-                self.adata.X,
-                p,
+                aux,
                 self.adata.obs["scalings"].values,
                 self.asignatures.obsm["embeddings"],
                 self.adata.obsm["embeddings"],
@@ -85,64 +97,6 @@ class CorrNMFDet(CorrNMF):
         )
         self.asignatures.X = W.T
 
-    def update_p(self) -> np.ndarray:
-        p = _utils_corrnmf.update_p_unnormalized(
-            self.asignatures.X, self.adata.obsm["exposures"]
-        )
-        p /= np.sum(p, axis=1, keepdims=True)
-        p = p.clip(EPSILON)
-        return p
-
-    def update_signature_embedding(
-        self, index: int, aux_row: np.ndarray, outer_prods_sample_embeddings: np.ndarray
-    ) -> None:
-        scaling = self.asignatures.obs["scalings"][index]
-
-        def objective_fun(embedding):
-            return _utils_corrnmf.objective_function_embedding(
-                embedding,
-                self.adata.obsm["embeddings"],
-                scaling,
-                self.adata.obs["scalings"].values,
-                self.variance,
-                aux_row,
-            )
-
-        summand_grad = np.sum(
-            aux_row[:, np.newaxis] * self.adata.obsm["embeddings"], axis=0
-        )
-
-        def gradient(embedding):
-            return _utils_corrnmf.gradient_embedding(
-                embedding,
-                self.adata.obsm["embeddings"],
-                scaling,
-                self.adata.obs["scalings"].values,
-                self.variance,
-                summand_grad,
-            )
-
-        def hessian(embedding):
-            return _utils_corrnmf.hessian_embedding(
-                embedding,
-                self.adata.obsm["embeddings"],
-                scaling,
-                self.adata.obs["scalings"].values,
-                self.variance,
-                outer_prods_sample_embeddings,
-            )
-
-        embedding = optimize.minimize(
-            fun=objective_fun,
-            x0=self.asignatures.obsm["embeddings"][index, :],
-            method="Newton-CG",
-            jac=gradient,
-            hess=hessian,
-        ).x
-        embedding[(0 < embedding) & (embedding < EPSILON)] = EPSILON
-        embedding[(-EPSILON < embedding) & (embedding < 0)] = -EPSILON
-        self.asignatures.obsm["embeddings"][index, :] = embedding
-
     def update_signature_embeddings(
         self, aux: np.ndarray, outer_prods_sample_embeddings: np.ndarray | None = None
     ) -> None:
@@ -163,61 +117,16 @@ class CorrNMFDet(CorrNMF):
             )
 
         for k, aux_row in enumerate(aux):
-            self.update_signature_embedding(k, aux_row, outer_prods_sample_embeddings)
-
-    def update_sample_embedding(
-        self,
-        index: int,
-        aux_col: np.ndarray,
-        outer_prods_signature_embeddings: np.ndarray,
-    ) -> None:
-        scaling = self.adata.obs["scalings"][index]
-
-        def objective_fun(embedding):
-            return _utils_corrnmf.objective_function_embedding(
-                embedding,
-                self.asignatures.obsm["embeddings"],
-                scaling,
-                self.asignatures.obs["scalings"].values,
+            embedding_init = self.asignatures.obsm["embeddings"][k, :]
+            self.asignatures.obsm["embeddings"][k, :] = _utils_corrnmf.update_embedding(
+                embedding_init,
+                self.adata.obsm["embeddings"],
+                self.asignatures.obs["scalings"][k],
+                self.adata.obs["scalings"].values,
                 self.variance,
-                aux_col,
+                aux_row,
+                outer_prods_sample_embeddings,
             )
-
-        summand_grad = np.sum(
-            aux_col[:, np.newaxis] * self.asignatures.obsm["embeddings"], axis=0
-        )
-
-        def gradient(embedding):
-            return _utils_corrnmf.gradient_embedding(
-                embedding,
-                self.asignatures.obsm["embeddings"],
-                scaling,
-                self.asignatures.obs["scalings"].values,
-                self.variance,
-                summand_grad,
-            )
-
-        def hessian(embedding):
-            return _utils_corrnmf.hessian_embedding(
-                embedding,
-                self.asignatures.obsm["embeddings"],
-                scaling,
-                self.asignatures.obs["scalings"].values,
-                self.variance,
-                outer_prods_signature_embeddings,
-            )
-
-        embedding = optimize.minimize(
-            fun=objective_fun,
-            x0=self.adata.obsm["embeddings"][index, :],
-            method="Newton-CG",
-            jac=gradient,
-            hess=hessian,
-            options={"maxiter": 3},
-        ).x
-        embedding[(0 < embedding) & (embedding < EPSILON)] = EPSILON
-        embedding[(-EPSILON < embedding) & (embedding < 0)] = -EPSILON
-        self.adata.obsm["embeddings"][index, :] = embedding
 
     def update_sample_embeddings(self, aux: np.ndarray) -> None:
         r"""
@@ -234,19 +143,26 @@ class CorrNMFDet(CorrNMF):
             self.asignatures.obsm["embeddings"],
             self.asignatures.obsm["embeddings"],
         )
-
         for d, aux_col in enumerate(aux.T):
-            self.update_sample_embedding(d, aux_col, outer_prods_signature_embeddings)
+            embedding_init = self.adata.obsm["embeddings"][d, :]
+            self.adata.obsm["embeddings"][d, :] = _utils_corrnmf.update_embedding(
+                embedding_init,
+                self.asignatures.obsm["embeddings"],
+                self.adata.obs["scalings"][d],
+                self.asignatures.obs["scalings"].values,
+                self.variance,
+                aux_col,
+                outer_prods_signature_embeddings,
+                options={"maxiter": 3},
+            )
 
     def update_embeddings(
         self,
-        p: np.ndarray,
+        aux: np.ndarray,
         given_parameters: dict[str, Any] | None = None,
     ) -> None:
         if given_parameters is None:
             given_parameters = {}
-
-        aux = np.einsum("dv,vkd->kd", self.adata.X, p)
 
         if "signature_embeddings" not in given_parameters:
             self.update_signature_embeddings(aux)
@@ -256,17 +172,9 @@ class CorrNMFDet(CorrNMF):
 
     def _update_parameters(self, given_parameters: dict[str, Any]) -> None:
         self.update_sample_scalings(given_parameters)
-        p = self.update_p()
-        self.update_signature_scalings(p, given_parameters)
-        self.update_embeddings(p, given_parameters)
-        self.update_variance(given_parameters)
-
-        if "asignatures" in given_parameters:
-            n_given_signatures = given_parameters["asignatures"].n_obs
-        else:
-            n_given_signatures = 0
-
-        if n_given_signatures < self.n_signatures:
-            self.update_signatures(given_parameters)
-
         self.compute_exposures()
+        aux = self._compute_aux()
+        self.update_signature_scalings(aux, given_parameters)
+        self.update_embeddings(aux, given_parameters)
+        self.update_variance(given_parameters)
+        self.update_signatures(given_parameters)
