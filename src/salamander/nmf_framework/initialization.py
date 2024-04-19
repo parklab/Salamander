@@ -142,7 +142,7 @@ def initialize_mat(
     init_method: _Init_methods = "nndsvd",
     given_signatures_mat: np.ndarray | None = None,
     **kwargs,
-) -> [np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Initialize the signature and exposure matrices.
 
