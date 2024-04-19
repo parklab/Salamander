@@ -134,28 +134,16 @@ class CorrNMF(SignatureNMF):
 
         if "asignatures" in given_parameters:
             given_asignatures = given_parameters["asignatures"]
-            given_signatures = given_asignatures.to_df().T
         else:
-            given_signatures = None
+            given_asignatures = None
 
-        W, _, signature_names = initialize(
-            self.adata.X.T,
+        self.asignatures, _ = initialize(
+            self.adata,
             self.n_signatures,
             self.init_method,
-            given_signatures,
+            given_asignatures,
             **init_kwargs,
         )
-        self.asignatures = ad.AnnData(W.T)
-        self.asignatures.obs_names = signature_names
-        self.asignatures.var_names = self.mutation_types
-
-        # keep signature annotations
-        if "asignatures" in given_parameters:
-            n_given_signatures = given_asignatures.n_obs
-            asignatures_new = self.asignatures[n_given_signatures:, :]
-            self.asignatures = ad.concat(
-                [given_asignatures, asignatures_new], join="outer"
-            )
 
         if "signature_scalings" in given_parameters:
             self.asignatures.obs["scalings"] = given_parameters["signature_scalings"]
