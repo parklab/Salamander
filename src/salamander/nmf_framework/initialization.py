@@ -60,10 +60,10 @@ def init_flat(data_mat: np.ndarray, n_signatures: int) -> tuple[np.ndarray, np.n
     """
     Initialize the signature and exposure matrices with one float, respectively.
     """
-    n_samples, n_features = data_mat.shape
-    scaling = np.mean(np.sum(data_mat, axis=1))
+    n_features = data_mat.shape[1]
     signatures_mat = np.full((n_signatures, n_features), 1 / n_features)
-    exposures_mat = np.full((n_samples, n_signatures), scaling / n_signatures)
+    exposures = np.sum(data_mat, axis=1) / n_signatures
+    exposures_mat = np.tile(exposures, (n_signatures, 1)).T
     return signatures_mat, exposures_mat
 
 
