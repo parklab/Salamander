@@ -70,7 +70,7 @@ def init_flat(data_mat: np.ndarray, n_signatures: int) -> tuple[np.ndarray, np.n
 def init_nndsvd(
     data_mat: np.ndarray,
     n_signatures: int,
-    init: Literal["nndsvd", "nndsvda", "nndsvdar"] = "nndsvd",
+    method: Literal["nndsvd", "nndsvda", "nndsvdar"] = "nndsvd",
     seed: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -82,7 +82,7 @@ def init_nndsvd(
 
     # pylint: disable-next=W0212
     exposures_mat, signatures_mat = sknmf._initialize_nmf(
-        data_mat, n_signatures, init=init
+        data_mat, n_signatures, init=method
     )
     return signatures_mat, exposures_mat
 
@@ -139,7 +139,7 @@ def init_separableNMF(
 def initialize_mat(
     data_mat: np.ndarray,
     n_signatures: int,
-    init_method: _Init_methods = "nndsvd",
+    method: _Init_methods = "nndsvd",
     given_signatures_mat: np.ndarray | None = None,
     **kwargs,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -153,7 +153,7 @@ def initialize_mat(
 
     n_signatures : int
 
-    init_method : str
+    method : str
         initialization method. One of 'custom', 'flat',
         'nndsvd', 'nndsvda', 'nndsvdar', 'random', 'separableNMF'.
 
@@ -175,19 +175,19 @@ def initialize_mat(
     exposures_mat : np.ndarray
         shape (n_samples, n_signatures)
     """
-    value_checker("init_method", init_method, _INIT_METHODS)
+    value_checker("method", method, _INIT_METHODS)
 
-    if init_method == "custom":
+    if method == "custom":
         matrices = init_custom(data_mat, n_signatures, **kwargs)
-    elif init_method == "flat":
+    elif method == "flat":
         matrices = init_flat(data_mat, n_signatures)
-    elif init_method in ["nndsvd", "nndsvda", "nndsvdar"]:
-        # mypy does not recognize that init_method is compatible
+    elif method in ["nndsvd", "nndsvda", "nndsvdar"]:
+        # mypy does not recognize that 'method' is compatible
         # with Literal["nndsvd", "nndsvda", "nndsvdar"]
         matrices = init_nndsvd(
-            data_mat, n_signatures, init=init_method, **kwargs  # type: ignore[arg-type] # noqa: E501
+            data_mat, n_signatures, method=method, **kwargs  # type: ignore[arg-type] # noqa: E501
         )
-    elif init_method == "random":
+    elif method == "random":
         matrices = init_random(data_mat, n_signatures, **kwargs)
     else:
         matrices = init_separableNMF(data_mat, n_signatures, **kwargs)
@@ -217,7 +217,7 @@ def initialize_mat(
 def initialize(
     adata: ad.AnnData,
     n_signatures: int,
-    init_method: _Init_methods = "nndsvd",
+    method: _Init_methods = "nndsvd",
     given_asignatures: ad.AnnData | None = None,
     **kwargs,
 ) -> tuple[ad.AnnData, np.ndarray]:
@@ -230,7 +230,7 @@ def initialize(
 
     n_signatures : int
 
-    init_method : str
+    method : str
         initialization method. One of 'custom', 'flat',
         'nndsvd', 'nndsvda', 'nndsvdar', 'random', 'separableNMF'.
 
@@ -267,7 +267,7 @@ def initialize(
         given_signatures_mat = None
 
     signatures_mat, exposures_mat = initialize_mat(
-        adata.X, n_signatures, init_method, given_signatures_mat, **kwargs
+        adata.X, n_signatures, method, given_signatures_mat, **kwargs
     )
     asignatures = ad.AnnData(signatures_mat)
     asignatures.var_names = adata.var_names
