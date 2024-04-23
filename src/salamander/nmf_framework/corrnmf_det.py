@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..initialization.initialize import EPSILON
 from . import _utils_corrnmf
 from ._utils_klnmf import update_W
 from .corrnmf import CorrNMF
-from .initialization import EPSILON
 
 if TYPE_CHECKING:
     from typing import Any

@@ -11,7 +11,7 @@ from .standard_nmf import StandardNMF
 if TYPE_CHECKING:
     from typing import Any, Literal
 
-    from .initialization import _Init_methods
+    from ..initialization.methods import _Init_methods
 
 _FITTING_KWARGS = ["weights_kl", "weights_lhalf"]
 _DEFAULT_FITTING_KWARGS = {kwarg: None for kwarg in _FITTING_KWARGS}

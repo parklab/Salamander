@@ -6,9 +6,9 @@ import numpy as np
 from numba import njit
 from scipy import optimize
 
+from ..initialization.initialize import EPSILON
 from ..utils import dict_checker, shape_checker, type_checker
 from ._utils_klnmf import check_given_asignatures, poisson_llh
-from .initialization import EPSILON
 
 if TYPE_CHECKING:
     from typing import Any

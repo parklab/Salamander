@@ -7,17 +7,17 @@ import anndata as ad
 import numpy as np
 from scipy.spatial.distance import squareform
 
+from ..initialization.initialize import initialize
 from ..tools import reduce_dimension_multiple
 from ..utils import value_checker
 from . import _utils_corrnmf
 from ._utils_klnmf import samplewise_kl_divergence
-from .initialization import initialize
 from .signature_nmf import SignatureNMF
 
 if TYPE_CHECKING:
     from typing import Any, Literal
 
-    from .initialization import _Init_methods
+    from ..initialization.methods import _Init_methods
     from .signature_nmf import _Dim_reduction_methods
 
 

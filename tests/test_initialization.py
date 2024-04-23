@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from salamander.nmf_framework import initialization
+from salamander.initialization import initialize
 
 PATH = "tests/test_data"
 PATH_TEST_DATA = f"{PATH}/nmf_framework/initialization"
@@ -46,7 +46,7 @@ class TestInitializeMain:
         self, data_mat, method, signatures_mat_expected, exposures_mat_expected
     ):
         kwargs = {"seed": SEED} if method in METHODS_STOCH else {}
-        signatures_mat, exposures_mat = initialization.initialize_mat(
+        signatures_mat, exposures_mat = initialize.initialize_mat(
             data_mat, N_SIGNATURES, method, **kwargs
         )
         assert np.allclose(signatures_mat, signatures_mat_expected)
@@ -56,7 +56,7 @@ class TestInitializeMain:
 def test_initialize_custom(data_mat):
     signatures_mat_custom = np.array([[0.1, 0.2, 0.7], [0.6, 0.1, 0.3]])
     exposures_mat_custom = np.arange(1, 9).reshape((4, 2))  # initialization clips zeros
-    signatures_mat, exposures_mat = initialization.initialize_mat(
+    signatures_mat, exposures_mat = initialize.initialize_mat(
         data_mat,
         N_SIGNATURES,
         "custom",

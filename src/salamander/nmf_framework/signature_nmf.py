@@ -10,8 +10,9 @@ from anndata import AnnData
 
 from .. import plot as pl
 from .. import tools as tl
+from ..initialization.initialize import EPSILON
+from ..initialization.methods import _INIT_METHODS
 from ..utils import match_signatures_pair, type_checker, value_checker
-from .initialization import _INIT_METHODS, EPSILON
 
 if TYPE_CHECKING:
     from typing import Any
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from seaborn.matrix import ClusterGrid
 
-    from .initialization import _Init_methods
+    from ..initialization.methods import _Init_methods
 
 _Dim_reduction_methods = Literal[
     "pca",

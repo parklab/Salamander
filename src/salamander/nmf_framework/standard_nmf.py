@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 import anndata as ad
 
 from .. import tools as tl
+from ..initialization.initialize import initialize
 from ._utils_klnmf import check_given_parameters
-from .initialization import initialize
 from .signature_nmf import SignatureNMF
 
 if TYPE_CHECKING:
