@@ -1,26 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 from numba import njit
 from scipy import optimize
 
 from ..initialization.initialize import EPSILON
-from ..utils import dict_checker, shape_checker, type_checker
-from ._utils_klnmf import check_given_asignatures, poisson_llh
-
-if TYPE_CHECKING:
-    from typing import Any
-
-GIVEN_PARAMETERS_ALLOWED = [
-    "asignatures",
-    "signature_scalings",
-    "sample_scalings",
-    "signature_embeddings",
-    "sample_embeddings",
-    "variance",
-]
+from ._utils_klnmf import poisson_llh
 
 
 @njit
@@ -113,72 +98,6 @@ def elbo_corrnmf(
         elbo -= np.sum(sample_embeddings**2) / (2 * variance)
 
     return elbo
-
-
-def check_given_scalings(
-    given_scalings: np.ndarray, n_scalings_expected: int, name: str
-) -> None:
-    type_checker(name, given_scalings, np.ndarray)
-    shape_checker(name, given_scalings, (n_scalings_expected,))
-
-
-def check_given_embeddings(
-    given_embeddings: np.ndarray,
-    n_embeddings_expected: int,
-    dim_embeddings_expected: int,
-    name: str,
-) -> None:
-    type_checker(name, given_embeddings, np.ndarray)
-    shape_checker(
-        name, given_embeddings, (n_embeddings_expected, dim_embeddings_expected)
-    )
-
-
-def check_given_parameters(
-    given_parameters: dict[str, Any] | None,
-    mutation_types_data: np.ndarray,
-    n_samples_data: int,
-    n_signatures_model: int,
-    dim_embeddings_model: int,
-) -> dict[str, Any]:
-    given_parameters = {} if given_parameters is None else given_parameters.copy()
-    dict_checker("given_parameters", given_parameters, GIVEN_PARAMETERS_ALLOWED)
-
-    if "asignatures" in given_parameters:
-        check_given_asignatures(
-            given_parameters["asignatures"], mutation_types_data, n_signatures_model
-        )
-    if "signature_scalings" in given_parameters:
-        check_given_scalings(
-            given_parameters["signature_scalings"],
-            n_signatures_model,
-            "given_signature_scalings",
-        )
-    if "sample_scalings" in given_parameters:
-        check_given_scalings(
-            given_parameters["sample_scalings"], n_samples_data, "given_sample_scalings"
-        )
-    if "signature_embeddings" in given_parameters:
-        check_given_embeddings(
-            given_parameters["signature_embeddings"],
-            n_signatures_model,
-            dim_embeddings_model,
-            "given_signature_embeddings",
-        )
-    if "sample_embeddings" in given_parameters:
-        check_given_embeddings(
-            given_parameters["sample_embeddings"],
-            n_samples_data,
-            dim_embeddings_model,
-            "given_sample_embeddings",
-        )
-    if "variance" in given_parameters:
-        given_variance = given_parameters["variance"]
-        type_checker("given_variance", given_variance, [float, int])
-        if given_variance <= 0.0:
-            raise ValueError("The variance has to be a positive real number.")
-
-    return given_parameters
 
 
 @njit

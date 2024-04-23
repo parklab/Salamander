@@ -4,10 +4,18 @@ Initialization methods for non-negative matrix factorization (NMF) models.
 
 from __future__ import annotations
 
+from typing import Any
+
 import anndata as ad
 import numpy as np
 
-from ..utils import normalize_WH, type_checker, value_checker
+from ..utils import (
+    dict_checker,
+    normalize_WH,
+    shape_checker,
+    type_checker,
+    value_checker,
+)
 from .methods import (
     _INIT_METHODS,
     _Init_methods,
@@ -19,6 +27,17 @@ from .methods import (
 )
 
 EPSILON = np.finfo(np.float32).eps
+
+# allowed given parameters
+GIVEN_PARAMETERS_STANDARD_NMF = ["asignatures"]
+GIVEN_PARAMETERS_CORRNMF = [
+    "asignatures",
+    "signature_scalings",
+    "sample_scalings",
+    "signature_embeddings",
+    "sample_embeddings",
+    "variance",
+]
 
 
 def initialize_mat(
@@ -99,7 +118,43 @@ def initialize_mat(
     return signatures_mat, exposures_mat
 
 
-def initialize(
+def check_given_asignatures(
+    given_asignatures: ad.AnnData, adata: ad.AnnData, n_signatures: int
+) -> None:
+    """
+    Check if the given signatures are compatible with
+    the input data and the number of signatures to be initialized.
+    The number of given signatures can be less or equal to the number of
+    signatures specified.
+
+    Inputs
+    ------
+    given_asignatures: AnnData
+        Known signatures that should be fixed by the algorithm.
+
+    adata: ad.AnnData
+        Input data.
+
+    n_signatures: int
+        The number of signatures to initialize.
+    """
+    type_checker("given_asignatures", given_asignatures, ad.AnnData)
+    if given_asignatures.n_vars != adata.n_vars:
+        raise ValueError(
+            "The given signatures have a different number of features than the data."
+        )
+    if not all(given_asignatures.var_names == adata.var_names):
+        raise ValueError(
+            "The features of the given signatures and the data are not identical."
+        )
+    if given_asignatures.n_obs > n_signatures:
+        raise ValueError(
+            "The number of given signatures exceeds "
+            "the number of signatures to initialize."
+        )
+
+
+def initialize_base(
     adata: ad.AnnData,
     n_signatures: int,
     method: _Init_methods = "nndsvd",
@@ -107,7 +162,8 @@ def initialize(
     **kwargs,
 ) -> tuple[ad.AnnData, np.ndarray]:
     """
-    Initialize the signature ann data object and the exposure matrix.
+    Initialize the signature anndata object and the exposure matrix.
+    The anndata object is unchanged and the exposure matrix is returned.
 
     Inputs
     ------
@@ -138,15 +194,7 @@ def initialize(
         shape (n_samples, n_signatures)
     """
     if given_asignatures is not None:
-        if given_asignatures.n_vars != adata.n_vars:
-            raise ValueError(
-                "The given signatures have a different number of features "
-                "than the data."
-            )
-        if not all(given_asignatures.var_names == adata.var_names):
-            raise ValueError(
-                "The features of the given signatures and the data are not identical."
-            )
+        check_given_asignatures(given_asignatures, adata, n_signatures)
         given_signatures_mat = given_asignatures.X
     else:
         given_signatures_mat = None
@@ -167,3 +215,161 @@ def initialize(
         )
 
     return asignatures, exposures_mat
+
+
+def check_given_parameters_standard_nmf(
+    adata: ad.AnnData,
+    n_signatures: int,
+    given_parameters: dict[str, Any],
+) -> None:
+    dict_checker("given_parameters", given_parameters, GIVEN_PARAMETERS_STANDARD_NMF)
+
+    if "asignatures" in given_parameters:
+        check_given_asignatures(given_parameters["asignatures"], adata, n_signatures)
+
+
+def initialize_standard_nmf(
+    adata: ad.AnnData,
+    n_signatures: int,
+    method: _Init_methods = "nndsvd",
+    given_parameters: dict[str, Any] | None = None,
+    **kwargs,
+) -> ad.AnnData:
+    given_parameters = {} if given_parameters is None else given_parameters.copy()
+    check_given_parameters_standard_nmf(adata, n_signatures, given_parameters)
+
+    if "asignatures" in given_parameters:
+        given_asignatures = given_parameters["asignatures"]
+    else:
+        given_asignatures = None
+
+    asignatures, exposures_mat = initialize_base(
+        adata,
+        n_signatures,
+        method,
+        given_asignatures,
+        **kwargs,
+    )
+    adata.obsm["exposures"] = exposures_mat
+    return asignatures
+
+
+def check_given_scalings_corrnmf(
+    given_scalings: np.ndarray, n_scalings_expected: int, name: str
+) -> None:
+    type_checker(name, given_scalings, np.ndarray)
+    shape_checker(name, given_scalings, (n_scalings_expected,))
+
+
+def check_given_embeddings_corrnmf(
+    given_embeddings: np.ndarray,
+    n_embeddings_expected: int,
+    dim_embeddings_expected: int,
+    name: str,
+) -> None:
+    type_checker(name, given_embeddings, np.ndarray)
+    shape_checker(
+        name, given_embeddings, (n_embeddings_expected, dim_embeddings_expected)
+    )
+
+
+def check_given_parameters_corrnmf(
+    adata: ad.AnnData,
+    n_signatures: int,
+    dim_embeddings: int,
+    given_parameters: dict[str, Any],
+) -> None:
+    dict_checker("given_parameters", given_parameters, GIVEN_PARAMETERS_CORRNMF)
+
+    if "asignatures" in given_parameters:
+        check_given_asignatures(given_parameters["asignatures"], adata, n_signatures)
+
+    if "signature_scalings" in given_parameters:
+        check_given_scalings_corrnmf(
+            given_parameters["signature_scalings"],
+            n_signatures,
+            "given_signature_scalings",
+        )
+    if "sample_scalings" in given_parameters:
+        check_given_scalings_corrnmf(
+            given_parameters["sample_scalings"], adata.n_obs, "given_sample_scalings"
+        )
+    if "signature_embeddings" in given_parameters:
+        check_given_embeddings_corrnmf(
+            given_parameters["signature_embeddings"],
+            n_signatures,
+            dim_embeddings,
+            "given_signature_embeddings",
+        )
+    if "sample_embeddings" in given_parameters:
+        check_given_embeddings_corrnmf(
+            given_parameters["sample_embeddings"],
+            adata.n_obs,
+            dim_embeddings,
+            "given_sample_embeddings",
+        )
+    if "variance" in given_parameters:
+        given_variance = given_parameters["variance"]
+        type_checker("given_variance", given_variance, [float, int])
+        if given_variance <= 0.0:
+            raise ValueError("The variance has to be a positive real number.")
+
+
+def initialize_corrnmf(
+    adata: ad.AnnData,
+    n_signatures: int,
+    dim_embeddings: int,
+    method: _Init_methods = "nndsvd",
+    given_parameters: dict[str, Any] | None = None,
+    **kwargs,
+) -> tuple[ad.AnnData, float]:
+    given_parameters = {} if given_parameters is None else given_parameters.copy()
+    check_given_parameters_corrnmf(
+        adata, n_signatures, dim_embeddings, given_parameters
+    )
+
+    if "asignatures" in given_parameters:
+        given_asignatures = given_parameters["asignatures"]
+    else:
+        given_asignatures = None
+
+    asignatures, _ = initialize_base(
+        adata,
+        n_signatures,
+        method,
+        given_asignatures,
+        **kwargs,
+    )
+
+    if "signature_scalings" in given_parameters:
+        asignatures.obs["scalings"] = given_parameters["signature_scalings"]
+    else:
+        asignatures.obs["scalings"] = np.zeros(n_signatures)
+
+    if "sample_scalings" in given_parameters:
+        adata.obs["scalings"] = given_parameters["sample_scalings"]
+    else:
+        adata.obs["scalings"] = np.zeros(adata.n_obs)
+
+    if "signature_embeddings" in given_parameters:
+        asignatures.obsm["embeddings"] = given_parameters["signature_embeddings"]
+    else:
+        asignatures.obsm["embeddings"] = np.random.multivariate_normal(
+            np.zeros(dim_embeddings), np.identity(dim_embeddings), size=n_signatures
+        )
+
+    if "sample_embeddings" in given_parameters:
+        adata.obsm["embeddings"] = given_parameters["sample_embeddings"]
+    else:
+        adata.obsm["embeddings"] = np.random.multivariate_normal(
+            np.zeros(dim_embeddings),
+            np.identity(dim_embeddings),
+            size=adata.n_obs,
+        )
+
+    if "variance" in given_parameters:
+        variance = float(given_parameters["variance"])
+    else:
+        variance = 1.0
+
+    return asignatures, variance

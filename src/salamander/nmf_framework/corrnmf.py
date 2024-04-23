@@ -7,7 +7,7 @@ import anndata as ad
 import numpy as np
 from scipy.spatial.distance import squareform
 
-from ..initialization.initialize import initialize
+from ..initialization.initialize import initialize_corrnmf
 from ..tools import reduce_dimension_multiple
 from ..utils import value_checker
 from . import _utils_corrnmf
@@ -104,7 +104,7 @@ class CorrNMF(SignatureNMF):
         self,
         given_parameters: dict[str, Any] | None = None,
         init_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> None:
         """
         Initialize the signature matrix, the signature and sample scalings,
         the signature and sample embeddings, and the variance.
@@ -123,65 +123,16 @@ class CorrNMF(SignatureNMF):
             of the signatures. This includes, for example, a possible 'seed'
             keyword argument for all stochastic initialization methods.
         """
-        given_parameters = _utils_corrnmf.check_given_parameters(
-            given_parameters=given_parameters,
-            mutation_types_data=self.mutation_types,
-            n_samples_data=self.adata.n_obs,
-            n_signatures_model=self.n_signatures,
-            dim_embeddings_model=self.dim_embeddings,
-        )
         init_kwargs = {} if init_kwargs is None else init_kwargs.copy()
-
-        if "asignatures" in given_parameters:
-            given_asignatures = given_parameters["asignatures"]
-        else:
-            given_asignatures = None
-
-        self.asignatures, _ = initialize(
+        self.asignatures, self.variance = initialize_corrnmf(
             self.adata,
             self.n_signatures,
+            self.dim_embeddings,
             self.init_method,
-            given_asignatures,
+            given_parameters,
             **init_kwargs,
         )
-
-        if "signature_scalings" in given_parameters:
-            self.asignatures.obs["scalings"] = given_parameters["signature_scalings"]
-        else:
-            self.asignatures.obs["scalings"] = np.zeros(self.n_signatures)
-
-        if "sample_scalings" in given_parameters:
-            self.adata.obs["scalings"] = given_parameters["sample_scalings"]
-        else:
-            self.adata.obs["scalings"] = np.zeros(self.adata.n_obs)
-
-        if "signature_embeddings" in given_parameters:
-            self.asignatures.obsm["embeddings"] = given_parameters[
-                "signature_embeddings"
-            ]
-        else:
-            self.asignatures.obsm["embeddings"] = np.random.multivariate_normal(
-                np.zeros(self.dim_embeddings),
-                np.identity(self.dim_embeddings),
-                size=self.n_signatures,
-            )
-
-        if "sample_embeddings" in given_parameters:
-            self.adata.obsm["embeddings"] = given_parameters["sample_embeddings"]
-        else:
-            self.adata.obsm["embeddings"] = np.random.multivariate_normal(
-                np.zeros(self.dim_embeddings),
-                np.identity(self.dim_embeddings),
-                size=self.adata.n_obs,
-            )
-
-        if "variance" in given_parameters:
-            self.variance = float(given_parameters["variance"])
-        else:
-            self.variance = 1.0
-
         self.compute_exposures()
-        return given_parameters
 
     def _setup_fitting_parameters(
         self, fitting_kwargs: dict[str, Any] | None = None

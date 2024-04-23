@@ -161,7 +161,12 @@ class CorrNMFDet(CorrNMF):
         if "sample_embeddings" not in given_parameters:
             self.update_sample_embeddings(aux)
 
-    def _update_parameters(self, given_parameters: dict[str, Any]) -> None:
+    def _update_parameters(
+        self, given_parameters: dict[str, Any] | None = None
+    ) -> None:
+        if given_parameters is None:
+            given_parameters = {}
+
         self.update_sample_scalings(given_parameters)
         self.compute_exposures()
         aux = self._compute_aux()

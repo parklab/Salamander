@@ -287,10 +287,9 @@ class SignatureNMF(ABC):
         self,
         given_parameters: dict[str, Any] | None = None,
         init_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> None:
         """
-        Initialize the NMF model parameters and return the potentially
-        updated 'given_parameters'.
+        Initialize the NMF model parameters.
 
         Example:
             Before running the Lee & Seung NMF multiplicative update rules to
@@ -308,7 +307,9 @@ class SignatureNMF(ABC):
         """
 
     @abstractmethod
-    def _update_parameters(self, given_parameters: dict[str, Any]) -> None:
+    def _update_parameters(
+        self, given_parameters: dict[str, Any] | None = None
+    ) -> None:
         """
         Update all model parameters.
         """
@@ -357,7 +358,7 @@ class SignatureNMF(ABC):
             iterations are printed. Only applies if 'verbose' is set to 1.
         """
         self._setup_adata(adata)
-        given_parameters = self._initialize(given_parameters, init_kwargs)
+        self._initialize(given_parameters, init_kwargs)
         self._setup_fitting_parameters(fitting_kwargs)
         of_values = [self.objective_function()]
         n_iteration = 0

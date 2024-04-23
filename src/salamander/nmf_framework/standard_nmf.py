@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING
 import anndata as ad
 
 from .. import tools as tl
-from ..initialization.initialize import initialize
-from ._utils_klnmf import check_given_parameters
+from ..initialization.initialize import initialize_standard_nmf
 from .signature_nmf import SignatureNMF
 
 if TYPE_CHECKING:
@@ -33,7 +32,7 @@ class StandardNMF(SignatureNMF):
         self,
         given_parameters: dict[str, Any] | None = None,
         init_kwargs: dict[str, Any] | None = None,
-    ):
+    ) -> None:
         """
         Initialize the signatures and exposures.
         A subset of the signatures can be given by the user. They will
@@ -48,27 +47,14 @@ class StandardNMF(SignatureNMF):
             Any further keywords arguments to be passed to the initialization method.
             This includes, for example, an optional 'seed' for all stochastic methods.
         """
-        given_parameters = check_given_parameters(
-            given_parameters=given_parameters,
-            mutation_types_data=self.mutation_types,
-            n_signatures_model=self.n_signatures,
-        )
         init_kwargs = {} if init_kwargs is None else init_kwargs.copy()
-
-        if "asignatures" in given_parameters:
-            given_asignatures = given_parameters["asignatures"]
-        else:
-            given_asignatures = None
-
-        self.asignatures, exposures_mat = initialize(
+        self.asignatures = initialize_standard_nmf(
             self.adata,
             self.n_signatures,
             self.init_method,
-            given_asignatures,
+            given_parameters,
             **init_kwargs,
         )
-        self.adata.obsm["exposures"] = exposures_mat
-        return given_parameters
 
     def reduce_dimension_embeddings(
         self, method: _Dim_reduction_methods = "umap", n_components: int = 2, **kwargs
