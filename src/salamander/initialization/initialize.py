@@ -321,8 +321,15 @@ def initialize_corrnmf(
     dim_embeddings: int,
     method: _Init_methods = "nndsvd",
     given_parameters: dict[str, Any] | None = None,
+    initialize_sample_embeddings: bool = True,
     **kwargs,
 ) -> tuple[ad.AnnData, float]:
+    if method == "custom":
+        raise ValueError(
+            "Custom parameter initializations are currently not supported "
+            "for (multimodal) correlated NMF."
+        )
+
     given_parameters = {} if given_parameters is None else given_parameters.copy()
     check_given_parameters_corrnmf(
         adata, n_signatures, dim_embeddings, given_parameters
@@ -358,6 +365,22 @@ def initialize_corrnmf(
             np.zeros(dim_embeddings), np.identity(dim_embeddings), size=n_signatures
         )
 
+    if initialize_sample_embeddings:
+        if "sample_embeddings" in given_parameters:
+            adata.obsm["embeddings"] = given_parameters["sample_embeddings"]
+        else:
+            adata.obsm["embeddings"] = np.random.multivariate_normal(
+                np.zeros(dim_embeddings),
+                np.identity(dim_embeddings),
+                size=adata.n_obs,
+            )
+
+    if "variance" in given_parameters:
+        variance = float(given_parameters["variance"])
+    else:
+        variance = 1.0
+
+    return asignatures, variance
     if "sample_embeddings" in given_parameters:
         adata.obsm["embeddings"] = given_parameters["sample_embeddings"]
     else:
