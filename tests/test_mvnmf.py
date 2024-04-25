@@ -3,10 +3,10 @@ import pandas as pd
 import pytest
 from anndata import AnnData
 
-from salamander.nmf_framework import mvnmf
+from salamander.models import mvnmf
 
 PATH = "tests/test_data"
-PATH_TEST_DATA = f"{PATH}/nmf_framework/mvnmf"
+PATH_TEST_DATA = f"{PATH}/models/mvnmf"
 
 
 @pytest.fixture

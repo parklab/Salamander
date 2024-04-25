@@ -4,7 +4,7 @@ import pytest
 from salamander.initialization import initialize
 
 PATH = "tests/test_data"
-PATH_TEST_DATA = f"{PATH}/nmf_framework/initialization"
+PATH_TEST_DATA = f"{PATH}/initialization"
 
 METHODS_DET = ["flat"]
 METHODS_STOCH = [

@@ -5,10 +5,10 @@ import pandas as pd
 import pytest
 from anndata import AnnData
 
-from salamander.nmf_framework import klnmf
+from salamander.models import klnmf
 
 PATH = "tests/test_data"
-PATH_TEST_DATA = f"{PATH}/nmf_framework/klnmf"
+PATH_TEST_DATA = f"{PATH}/models/klnmf"
 
 
 @pytest.fixture

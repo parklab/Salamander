@@ -2,10 +2,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from salamander.nmf_framework import _utils_klnmf
+from salamander.models import _utils_klnmf
 
 PATH = "tests/test_data"
-PATH_TEST_DATA = f"{PATH}/nmf_framework/utils_klnmf"
+PATH_TEST_DATA = f"{PATH}/models/utils_klnmf"
 
 
 @pytest.fixture

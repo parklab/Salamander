@@ -3,10 +3,10 @@ import pandas as pd
 import pytest
 from anndata import AnnData
 
-from salamander.nmf_framework import corrnmf_det
+from salamander.models import corrnmf_det
 
 PATH = "tests/test_data"
-PATH_TEST_DATA = f"{PATH}/nmf_framework/corrnmf"
+PATH_TEST_DATA = f"{PATH}/models/corrnmf"
 
 
 @pytest.fixture
