@@ -142,7 +142,7 @@ def match_to_catalog(
     """
     cosine_sim = 1 - pairwise_distances(signatures, catalog, metric=metric)
     matches_indices = [np.argmax(row) for row in cosine_sim]
-    matches = catalog.loc[matches_indices, :]
+    matches = catalog.iloc[matches_indices, :]
     return matches
 
 
