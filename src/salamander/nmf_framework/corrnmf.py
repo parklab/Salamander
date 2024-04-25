@@ -191,7 +191,7 @@ class CorrNMF(SignatureNMF):
         self, method: _Dim_reduction_methods = "umap"
     ) -> tuple[ad.AnnData, str]:
         """
-        Plot the exposures directly if the number of signatures is at most 2.
+        Plot the embeddings directly if the embedding dimension is at most 2.
         """
         plot_adata = ad.concat([self.asignatures, self.adata])
 
