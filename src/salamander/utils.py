@@ -141,8 +141,8 @@ def match_to_catalog(
     Find the best matching signatures in catalog for all signatures.
     """
     cosine_sim = 1 - pairwise_distances(signatures, catalog, metric=metric)
-    matches_indices = [np.argmax(row) for row in cosine_sim]
-    matches = catalog.iloc[matches_indices, :]
+    matches_indices = [int(np.argmax(row)) for row in cosine_sim]
+    matches = catalog.iloc[matches_indices]
     return matches
 
 
