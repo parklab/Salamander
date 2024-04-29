@@ -541,7 +541,7 @@ def barplot(adata: AnnData, **kwargs) -> Axes | Iterable[Axes]:
     return barplot_pandas(adata.to_df(), **kwargs)
 
 
-def _get_obs_order(data: pd.DataFrame, normalize: bool = True) -> np.ndarray:
+def get_obs_order(data: pd.DataFrame, normalize: bool = True) -> np.ndarray:
     """
     Compute the aesthetically most pleasing order of the observations
     of a non-negative data array of shape (n_obs, n_dimensions) for a
@@ -608,7 +608,7 @@ def _reorder_data(
         The reorderd annotated data.
     """
     if obs_order is None:
-        obs_order = _get_obs_order(data, normalize=normalize)
+        obs_order = get_obs_order(data, normalize=normalize)
 
     data_reordered = data.loc[obs_order, :]
 

@@ -14,7 +14,7 @@ def data():
 
 
 def test_get_obs_order_normalized(data):
-    obs_order = plot._get_obs_order(data, normalize=True)
+    obs_order = plot.get_obs_order(data, normalize=True)
 
     # A next to D
     position_a = np.where(obs_order == "a")[0][0]
@@ -28,7 +28,7 @@ def test_get_obs_order_normalized(data):
 
 
 def test_get_obs_order_unnormalized(data):
-    obs_order = plot._get_obs_order(data, normalize=False)
+    obs_order = plot.get_obs_order(data, normalize=False)
 
     # A as far away from D as possible
     position_a = np.where(obs_order == "a")[0][0]
