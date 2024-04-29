@@ -187,7 +187,6 @@ def objective_function_embedding(
     scalings_other: np.ndarray,
     variance: float,
     aux_vector: np.ndarray,
-    add_penalty: bool = True,
 ) -> float:
     r"""
     The negative objective function of a signature or sample embedding in CorrNMF.
@@ -225,10 +224,6 @@ def objective_function_embedding(
         where X is the data matrix and p are the auxiliary parameters of CorrNMF.
         If 'embedding' is a signature embedding, the corresponding row is provided.
         If 'embedding' is a sample embedding, the corresponding column is provided.
-
-    add_penalty : bool, default=True
-        If True, the norm of the embedding will be penalized.
-        This argument is useful for the implementation of multimodal CorrNMF.
     """
     n_embeddings_other = embeddings_other.shape[0]
     of_value = 0.0
@@ -240,10 +235,7 @@ def objective_function_embedding(
         of_value += scalar_products[i] * aux_vector[i]
 
     of_value -= np.sum(np.exp(scaling + scalings_other + scalar_products))
-
-    if add_penalty:
-        of_value -= np.dot(embedding, embedding) / (2 * variance)
-
+    of_value -= np.dot(embedding, embedding) / (2 * variance)
     return -of_value
 
 
@@ -255,7 +247,6 @@ def gradient_embedding(
     scalings_other: np.ndarray,
     variance: float,
     summand_grad: np.ndarray,
-    add_penalty: bool = True,
 ) -> np.ndarray:
     r"""
     The negative gradient of the objective function w.r.t. a signature or
@@ -290,10 +281,6 @@ def gradient_embedding(
 
     summand_grad : np.ndarray
         shape (dim_embeddings,). A signature/sample-independent summand.
-
-    add_penalty : bool, default=True
-        If True, the norm of the embedding will be penalized.
-        This argument is useful for the implementation of multimodal CorrNMF.
     """
     scalar_products = embeddings_other.dot(embedding)
     gradient = -np.sum(
@@ -302,10 +289,7 @@ def gradient_embedding(
         axis=0,
     )
     gradient += summand_grad
-
-    if add_penalty:
-        gradient -= embedding / variance
-
+    gradient -= embedding / variance
     return -gradient
 
 
@@ -317,7 +301,6 @@ def hessian_embedding(
     scalings_other: np.ndarray,
     variance: float,
     outer_prods_embeddings_other: np.ndarray,
-    add_penalty: bool = True,
 ) -> np.ndarray:
     r"""
     The negative Hessian of the objective function w.r.t. a signature or
@@ -352,10 +335,6 @@ def hessian_embedding(
 
     outer_prods_embeddings_other : np.ndarray
         shape (n_samples | n_signatures, dim_embeddings, dim_embeddings)
-
-    add_penalty : bool, default=True
-        Set to True, the norm of the embedding will be penalized.
-        This argument is useful for the implementation of multimodal CorrNMF.
     """
     n_embeddings_other, dim_embeddings = embeddings_other.shape
     scalar_products = embeddings_other.dot(embedding)
@@ -366,7 +345,7 @@ def hessian_embedding(
         for m2 in range(dim_embeddings):
             for i in range(n_embeddings_other):
                 hessian[m1, m2] -= scalings[i] * outer_prods_embeddings_other[i, m1, m2]
-            if add_penalty and m1 == m2:
+            if m1 == m2:
                 hessian[m1, m2] -= 1 / variance
 
     return -hessian
