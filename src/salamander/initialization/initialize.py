@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 import anndata as ad
+import mudata as md
 import numpy as np
 
 from ..utils import (
@@ -381,13 +382,94 @@ def initialize_corrnmf(
         variance = 1.0
 
     return asignatures, variance
+
+
+def check_given_parameters_mmcorrnmf(
+    mdata: md.MuData,
+    ns_signatures: list[int],
+    dim_embeddings: int,
+    given_parameters: dict[str, Any],
+) -> None:
+    valid_keys = list(mdata.mod.keys()) + ["sample_embeddings", "variance"]
+    dict_checker("given_parameters", given_parameters, valid_keys)
+
+    for (mod_name, adata), n_signatures in zip(mdata.mod.items(), ns_signatures):
+        if mod_name in given_parameters:
+            given_parameters_mod = given_parameters[mod_name]
+        else:
+            given_parameters_mod = {}
+
+        check_given_parameters_corrnmf(
+            adata, n_signatures, dim_embeddings, given_parameters_mod
+        )
+        if "sample_embeddings" in given_parameters_mod:
+            raise KeyError(
+                "The sample embeddings are shared across modalities in multimodal "
+                "correlated NMF. They cannot be provided as given parameters on the "
+                "modality level."
+            )
+        if "variance" in given_parameters_mod:
+            raise KeyError(
+                "The variance parameters of multimodal correlated NMF is shared "
+                "across modalies. It cannot be provided as a given parameter on the "
+                "modality level."
+            )
+
+
+def initialize_mmcorrnmf(
+    mdata: md.MuData,
+    ns_signatures: list[int],
+    dim_embeddings: int,
+    method: _Init_methods = "nndsvd",
+    given_parameters: dict[str, Any] | None = None,
+    **kwargs,
+) -> tuple[dict[str, ad.AnnData], float]:
+    """
+    Initialize the MuData object and the annotated signatures of all modalities.
+
+    Multimodal correlated NMF shares the sample embeddings across modalities.
+    There are sample biases, signatures, and signature scalings & embeddings for
+    each individual modality.
+    """
+    given_parameters = {} if given_parameters is None else given_parameters.copy()
+    check_given_parameters_mmcorrnmf(
+        mdata, ns_signatures, dim_embeddings, given_parameters
+    )
+    asignatures = {}
+
+    for (mod_name, adata), n_signatures in zip(mdata.mod.items(), ns_signatures):
+        if mod_name in given_parameters:
+            given_parameters_mod = given_parameters[mod_name]
+        else:
+            given_parameters_mod = {}
+
+        asigs, _ = initialize_corrnmf(
+            adata,
+            n_signatures,
+            dim_embeddings,
+            method,
+            given_parameters_mod,
+            initialize_sample_embeddings=False,
+            **kwargs,
+        )
+        if "asignatures" in given_parameters_mod:
+            n_given_sigs = given_parameters_mod["asignatures"].n_obs
+        else:
+            n_given_sigs = 0
+
+        sig_names_new = [
+            f"{mod_name} " + sig_name for sig_name in asigs.obs_names[n_given_sigs:]
+        ]
+        asigs.obs_names = list(asigs.obs_names[:n_given_sigs]) + sig_names_new
+        asignatures[mod_name] = asigs
+
     if "sample_embeddings" in given_parameters:
-        adata.obsm["embeddings"] = given_parameters["sample_embeddings"]
+        mdata.obsm["embeddings"] = given_parameters["sample_embeddings"]
     else:
-        adata.obsm["embeddings"] = np.random.multivariate_normal(
+        mdata.obsm["embeddings"] = np.random.multivariate_normal(
             np.zeros(dim_embeddings),
             np.identity(dim_embeddings),
-            size=adata.n_obs,
+            size=mdata.n_obs,
         )
 
     if "variance" in given_parameters:
