@@ -85,7 +85,9 @@ class CorrNMFDet(CorrNMF):
         )
         self.asignatures.X = W.T
 
-    def update_signature_embeddings(self, aux: np.ndarray) -> None:
+    def update_signature_embeddings(
+        self, aux: np.ndarray, outer_prods_sample_embeddings: np.ndarray | None = None
+    ) -> None:
         r"""
         Update all signature embeddings by optimizing
         the surrogate objective function using scipy.optimize.minimize
@@ -95,11 +97,13 @@ class CorrNMFDet(CorrNMF):
             aux_kd = \sum_v X_vd * p_vkd
             is used for updating the signatures and the sample embeddidngs.
         """
-        outer_prods_sample_embeddings = np.einsum(
-            "Dm,Dn->Dmn",
-            self.adata.obsm["embeddings"],
-            self.adata.obsm["embeddings"],
-        )
+        if outer_prods_sample_embeddings is None:
+            outer_prods_sample_embeddings = np.einsum(
+                "Dm,Dn->Dmn",
+                self.adata.obsm["embeddings"],
+                self.adata.obsm["embeddings"],
+            )
+
         for k, aux_row in enumerate(aux):
             embedding_init = self.asignatures.obsm["embeddings"][k, :]
             self.asignatures.obsm["embeddings"][k, :] = _utils_corrnmf.update_embedding(
