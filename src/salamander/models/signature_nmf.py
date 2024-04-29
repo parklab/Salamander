@@ -187,16 +187,16 @@ class SignatureNMF(ABC):
         self.history: dict[str, Any] = {}
 
     @property
-    def mutation_types(self) -> np.ndarray:
-        return self.adata.var_names.to_numpy(dtype=str)
+    def mutation_types(self) -> list[str]:
+        return list(self.adata.var_names)
 
     @property
-    def signature_names(self) -> np.ndarray:
-        return self.asignatures.obs_names.to_numpy(dtype=str)
+    def signature_names(self) -> list[str]:
+        return list(self.asignatures.obs_names)
 
     @property
-    def sample_names(self) -> np.ndarray:
-        return self.adata.obs_names.to_numpy(dtype=str)
+    def sample_names(self) -> list[str]:
+        return list(self.adata.obs_names)
 
     @property
     def signatures(self) -> pd.DataFrame:

@@ -208,7 +208,7 @@ class CorrNMF(SignatureNMF):
 
         return plot_adata, basis
 
-    def _get_default_embedding_plot_annotations(self) -> np.ndarray:
+    def _get_default_embedding_plot_annotations(self) -> list[str]:
         """
         The embedding plot defaults to annotating the signature embeddings.
         """
