@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
@@ -9,8 +9,6 @@ from . import _utils_klnmf
 from .standard_nmf import StandardNMF
 
 if TYPE_CHECKING:
-    from typing import Any, Literal
-
     from ..initialization.methods import _Init_methods
 
 _FITTING_KWARGS = ["weights_kl", "weights_lhalf"]

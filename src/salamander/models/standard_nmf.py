@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import anndata as ad
 
@@ -10,8 +10,6 @@ from ..initialization.initialize import initialize_standard_nmf
 from .signature_nmf import SignatureNMF
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from .signature_nmf import _Dim_reduction_methods
 
 

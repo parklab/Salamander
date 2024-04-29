@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 import anndata as ad
 import numpy as np
@@ -15,8 +15,6 @@ from ._utils_klnmf import samplewise_kl_divergence
 from .signature_nmf import SignatureNMF
 
 if TYPE_CHECKING:
-    from typing import Any, Literal
-
     from ..initialization.methods import _Init_methods
     from .signature_nmf import _Dim_reduction_methods
 

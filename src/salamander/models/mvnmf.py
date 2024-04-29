@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 from numba import njit
@@ -11,8 +11,6 @@ from ._utils_klnmf import kl_divergence, samplewise_kl_divergence, update_H
 from .standard_nmf import StandardNMF
 
 if TYPE_CHECKING:
-    from typing import Any, Literal
-
     from ..initialization.methods import _Init_methods
 
 _DEFAULT_FITTING_KWARGS = None

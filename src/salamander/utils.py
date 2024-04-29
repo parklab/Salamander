@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Iterable
 
 import numpy as np
 import pandas as pd
@@ -9,8 +9,6 @@ from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import pairwise_distances
 
 if TYPE_CHECKING:
-    from typing import Any, Iterable
-
     from anndata import AnnData
 
 EPSILON = np.finfo(np.float32).eps

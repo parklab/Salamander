@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any
 
 import numpy as np
 
@@ -8,9 +8,6 @@ from ..initialization.initialize import EPSILON
 from . import _utils_corrnmf
 from ._utils_klnmf import update_W
 from .corrnmf import CorrNMF
-
-if TYPE_CHECKING:
-    from typing import Any
 
 
 class CorrNMFDet(CorrNMF):

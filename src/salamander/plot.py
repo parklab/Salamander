@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
 import fastcluster
 import matplotlib as mpl
@@ -17,8 +17,6 @@ from .consts import COLORS_INDEL83, COLORS_SBS96, INDEL_TYPES_83, SBS_TYPES_96
 from .utils import _get_basis_obsm, _get_basis_obsp, match_to_catalog
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from anndata import AnnData
     from matplotlib.colors import Colormap
     from matplotlib.typing import ColorType

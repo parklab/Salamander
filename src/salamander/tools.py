@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 import numpy as np
 import pandas as pd
@@ -9,8 +9,6 @@ import pandas as pd
 from .utils import _get_basis_obsm, value_checker
 
 if TYPE_CHECKING:
-    from typing import Iterable
-
     from anndata import AnnData
 
 

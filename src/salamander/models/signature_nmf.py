@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Iterable, Literal, get_args
+from typing import TYPE_CHECKING, Any, Iterable, Literal, get_args
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,8 +15,6 @@ from ..initialization.methods import _INIT_METHODS
 from ..utils import match_signatures_pair, type_checker, value_checker
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from matplotlib.axes import Axes
     from seaborn.matrix import ClusterGrid
 
