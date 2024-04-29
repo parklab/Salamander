@@ -10,6 +10,7 @@ from sklearn.metrics import pairwise_distances
 
 if TYPE_CHECKING:
     from anndata import AnnData
+    from mudata import MuData
 
 EPSILON = np.finfo(np.float32).eps
 
@@ -100,7 +101,7 @@ def value_checker(arg_name: str, arg: Any, allowed_values: Iterable[Any]) -> Non
         )
 
 
-def _get_basis_obsm(adata: AnnData, basis: str) -> np.ndarray:
+def _get_basis_obsm(adata: AnnData | MuData, basis: str) -> np.ndarray:
     """
     Get the multidimensional observation annotations named 'basis'.
     Tries to recover 'X_basis' if 'basis' is not a key of adata.obsm.
@@ -113,7 +114,7 @@ def _get_basis_obsm(adata: AnnData, basis: str) -> np.ndarray:
         raise KeyError(f"Could not find '{basis}' or 'X_{basis}' in .obsm")
 
 
-def _get_basis_obsp(adata: AnnData, basis: str) -> np.ndarray:
+def _get_basis_obsp(adata: AnnData | MuData, basis: str) -> np.ndarray:
     """
     Get the pairwise observation annotations named 'basis'.
     Tries to recover 'X_basis' if 'basis' is not a key of adata.obsp.
