@@ -1,20 +1,23 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Iterable, Literal
 
-import anndata as ad
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.distance import squareform
 
+from .. import plot as pl
+from .. import tools as tl
 from ..initialization.initialize import initialize_corrnmf
-from ..tools import reduce_dimension_multiple
 from ..utils import value_checker
 from . import _utils_corrnmf
 from ._utils_klnmf import samplewise_kl_divergence
 from .signature_nmf import SignatureNMF
 
 if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
     from ..initialization.methods import _Init_methods
     from .signature_nmf import _Dim_reduction_methods
 
@@ -174,25 +177,25 @@ class CorrNMF(SignatureNMF):
         else:
             self.asignatures.obsp["correlation"] = correlation
 
-    def reduce_dimension_embeddings(
-        self, method: _Dim_reduction_methods = "umap", n_components: int = 2, **kwargs
-    ) -> None:
-        reduce_dimension_multiple(
-            adatas=[self.asignatures, self.adata],
+    def plot_embeddings(
+        self,
+        method: _Dim_reduction_methods = "umap",
+        n_components: int = 2,
+        dimensions: tuple[int, int] = (0, 1),
+        color: str | None = None,
+        zorder: str | None = None,
+        annotations: Iterable[str] | None = None,
+        outfile: str | None = None,
+        **kwargs,
+    ) -> Axes:
+        adatas = [self.asignatures, self.adata]
+        tl.reduce_dimension_multiple(
+            adatas=adatas,
             basis="embeddings",
             method=method,
             n_components=n_components,
             **kwargs,
         )
-
-    def _get_embedding_plot_adata(
-        self, method: _Dim_reduction_methods = "umap"
-    ) -> tuple[ad.AnnData, str]:
-        """
-        Plot the embeddings directly if the embedding dimension is at most 2.
-        """
-        plot_adata = ad.concat([self.asignatures, self.adata])
-
         if self.dim_embeddings <= 2:
             warnings.warn(
                 f"The embedding dimension is {self.dim_embeddings}. "
@@ -204,10 +207,29 @@ class CorrNMF(SignatureNMF):
         else:
             basis = method
 
-        return plot_adata, basis
+        if color is None:
+            color = "color_embedding"
+            self.asignatures.obs[color] = self.n_signatures * ["black"]
+            self.adata.obs[color] = self.adata.n_obs * ["#1f77b4"]  # default blue
 
-    def _get_default_embedding_plot_annotations(self) -> list[str]:
-        """
-        The embedding plot defaults to annotating the signature embeddings.
-        """
-        return self.signature_names
+        if zorder is None:
+            zorder = "zorder_embedding"
+            self.asignatures.obs[zorder] = self.n_signatures * [2]
+            self.adata.obs[zorder] = self.adata.n_obs * [1]
+
+        if annotations is None:
+            annotations = self.signature_names
+
+        ax = pl.embedding_multiple(
+            adatas=adatas,
+            basis=basis,
+            dimensions=dimensions,
+            color=color,
+            zorder=zorder,
+            annotations=annotations,
+            **kwargs,
+        )
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches="tight")
+
+        return ax

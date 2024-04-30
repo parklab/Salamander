@@ -559,36 +559,13 @@ class SignatureNMF(ABC):
         return clustergrid
 
     @abstractmethod
-    def reduce_dimension_embeddings(
-        self, method: _Dim_reduction_methods = "umap", **kwargs
-    ) -> None:
-        """
-        Reduce the dimension of the embeddings.
-        Usually, the embeddings are the signature exposures of the samples.
-        But in correlated NMF, they are the signature and sample embeddings
-        in a shared embedding space.
-        """
-
-    @abstractmethod
-    def _get_embedding_plot_adata(
-        self, method: _Dim_reduction_methods = "umap"
-    ) -> tuple[AnnData, str]:
-        """
-        Get the anndata object containing all embeddings
-        and the name of the embedding basis.
-        """
-
-    @abstractmethod
-    def _get_default_embedding_plot_annotations(self) -> Iterable[str] | None:
-        """
-        Get the default annotations of the data points in the embedding plot.
-        """
-
     def plot_embeddings(
         self,
         method: _Dim_reduction_methods = "umap",
         n_components: int = 2,
         dimensions: tuple[int, int] = (0, 1),
+        color: str | None = None,
+        zorder: str | None = None,
         annotations: Iterable[str] | None = None,
         outfile: str | None = None,
         **kwargs,
@@ -613,6 +590,12 @@ class SignatureNMF(ABC):
         dimensions: tuple[int, int], default=(0,1)
             The indices of the dimensions to plot.
 
+        color: str, default=None
+            Optional annotation key to use for the colors.
+
+        zorder: str, default=None
+            Optional annotation key to use for the drawing order.
+
         annotations : Iterable[str], optional, default=None
             Annotations per data point, e.g. the sample names. If None,
             the algorithm-specific default annotations are used.
@@ -632,20 +615,3 @@ class SignatureNMF(ABC):
         ax : matplotlib.axes.Axes
             The matplotlib axes containing the plot.
         """
-        self.reduce_dimension_embeddings(method=method, n_components=n_components)
-        adata, basis = self._get_embedding_plot_adata(method=method)
-
-        if annotations is None:
-            annotations = self._get_default_embedding_plot_annotations()
-
-        ax = pl.embedding(
-            adata=adata,
-            basis=basis,
-            dimensions=dimensions,
-            annotations=annotations,
-            **kwargs,
-        )
-        if outfile is not None:
-            plt.savefig(outfile, bbox_inches="tight")
-
-        return ax

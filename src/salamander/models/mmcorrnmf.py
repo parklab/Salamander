@@ -20,7 +20,7 @@ import pandas as pd
 from .. import plot as pl
 from .. import tools as tl
 from ..initialization.initialize import EPSILON, _Init_methods, initialize_mmcorrnmf
-from ..utils import _get_basis_obsm, dict_checker, type_checker, value_checker
+from ..utils import dict_checker, type_checker, value_checker
 from . import _utils_corrnmf
 from ._utils_klnmf import samplewise_kl_divergence, update_W
 
@@ -646,30 +646,24 @@ class MultimodalCorrNMF:
 
         return clustergrid
 
-    def reduce_dimension_embeddings(
-        self, method: _Dim_reduction_methods = "umap", n_components: int = 2, **kwargs
-    ) -> None:
+    def plot_embeddings(
+        self,
+        method: _Dim_reduction_methods = "umap",
+        n_components: int = 2,
+        dimensions: tuple[int, int] = (0, 1),
+        color: str | None = None,
+        zorder: str | None = None,
+        annotations: Iterable[str] | None = None,
+        outfile: str | None = None,
+        **kwargs,
+    ) -> Axes:
         adatas = list(self.asignatures.values()) + [self.mdata]
         tl.reduce_dimension_multiple(
             adatas=adatas,
             basis="embeddings",
             method=method,
             n_components=n_components,
-            **kwargs,
         )
-
-    def _get_embedding_plot_adata(
-        self, method: _Dim_reduction_methods = "umap"
-    ) -> tuple[ad.AnnData, str]:
-        """
-        Plot the exposures directly if the number of signatures is at most 2.
-        """
-        adata_base = ad.AnnData(X=np.zeros((self.mdata.n_obs, 1)))
-        adata_base.obsm["embeddings"] = self.mdata.obsm["embeddings"]
-        adata_base.obsm[f"X_{method}"] = _get_basis_obsm(self.mdata, method)
-        adatas = list(self.asignatures.values()) + [adata_base]
-        plot_adata = ad.concat(adatas)
-
         if self.dim_embeddings <= 2:
             warnings.warn(
                 f"The embedding dimension is {self.dim_embeddings}. "
@@ -681,33 +675,27 @@ class MultimodalCorrNMF:
         else:
             basis = method
 
-        return plot_adata, basis
+        if color is None:
+            color = "color_embedding"
+            for asigs in self.asignatures.values():
+                asigs.obs[color] = asigs.n_obs * ["black"]
+            self.mdata.obs[color] = self.mdata.n_obs * ["#1f77b4"]  # default blue
 
-    def _get_default_embedding_plot_annotations(self) -> list[str]:
-        """
-        The embedding plot defaults to annotating the signature embeddings.
-        """
-        return sum(self.signature_names.values(), [])
-
-    def plot_embeddings(
-        self,
-        method: _Dim_reduction_methods = "umap",
-        n_components: int = 2,
-        dimensions: tuple[int, int] = (0, 1),
-        annotations: Iterable[str] | None = None,
-        outfile: str | None = None,
-        **kwargs,
-    ) -> Axes:
-        self.reduce_dimension_embeddings(method=method, n_components=n_components)
-        adata, basis = self._get_embedding_plot_adata(method=method)
+        if zorder is None:
+            zorder = "zorder_embedding"
+            for asigs in self.asignatures.values():
+                asigs.obs[zorder] = asigs.n_obs * [2]
+            self.mdata.obs[zorder] = self.mdata.n_obs * [1]
 
         if annotations is None:
-            annotations = self._get_default_embedding_plot_annotations()
+            annotations = sum(self.signature_names.values(), [])
 
-        ax = pl.embedding(
-            adata=adata,
+        ax = pl.embedding_multiple(
+            adatas=adatas,
             basis=basis,
             dimensions=dimensions,
+            color=color,
+            zorder=zorder,
             annotations=annotations,
             **kwargs,
         )

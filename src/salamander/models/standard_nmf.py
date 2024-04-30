@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterable
 
-import anndata as ad
+import matplotlib.pyplot as plt
 
+from .. import plot as pl
 from .. import tools as tl
 from ..initialization.initialize import initialize_standard_nmf
 from .signature_nmf import SignatureNMF
 
 if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
     from .signature_nmf import _Dim_reduction_methods
 
 
@@ -54,35 +57,43 @@ class StandardNMF(SignatureNMF):
             **init_kwargs,
         )
 
-    def reduce_dimension_embeddings(
-        self, method: _Dim_reduction_methods = "umap", n_components: int = 2, **kwargs
-    ) -> None:
+    def plot_embeddings(
+        self,
+        method: _Dim_reduction_methods = "umap",
+        n_components: int = 2,
+        dimensions: tuple[int, int] = (0, 1),
+        color: str | None = None,
+        zorder: str | None = None,
+        annotations: Iterable[str] | None = None,
+        outfile: str | None = None,
+        **kwargs,
+    ) -> Axes:
         tl.reduce_dimension(
             self.adata,
             basis="exposures",
             method=method,
             n_components=n_components,
-            **kwargs,
         )
-
-    def _get_embedding_plot_adata(
-        self, method: _Dim_reduction_methods = "umap"
-    ) -> tuple[ad.AnnData, str]:
-        """
-        Plot the exposures directly if the number of signatures is at most 2.
-        """
         if self.n_signatures <= 2:
             warnings.warn(
                 f"There are only {self.n_signatures} many signatures. "
                 "The exposures are plotted directly.",
                 UserWarning,
             )
-            return self.adata, "exposures"
+            basis = "exposures"
+        else:
+            basis = method
 
-        return self.adata, method
+        ax = pl.embedding(
+            adata=self.adata,
+            basis=basis,
+            dimensions=dimensions,
+            color=color,
+            zorder=zorder,
+            annotations=annotations,
+            **kwargs,
+        )
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches="tight")
 
-    def _get_default_embedding_plot_annotations(self) -> None:
-        """
-        The embedding plot defaults to no annotations.
-        """
-        return
+        return ax
