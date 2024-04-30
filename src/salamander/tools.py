@@ -10,6 +10,7 @@ from .utils import _get_basis_obsm, value_checker
 
 if TYPE_CHECKING:
     from anndata import AnnData
+    from mudata import MuData
 
 
 def _pca(data: np.ndarray, n_components: int = 2, **kwargs) -> np.ndarray:
@@ -134,7 +135,7 @@ def reduce_dimension(
 
 
 def reduce_dimension_multiple(
-    adatas: Iterable[AnnData], basis: str, method="umap", **kwargs
+    adatas: Iterable[AnnData | MuData], basis: str, method="umap", **kwargs
 ) -> None:
     """
     Compute a joint dimensionality reduction of the same multi-dimensional observation

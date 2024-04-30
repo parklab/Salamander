@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import Any, Iterable
 
+import anndata as ad
+import mudata as md
 import numpy as np
 import pandas as pd
 from numba import njit
 from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import pairwise_distances
-
-if TYPE_CHECKING:
-    from anndata import AnnData
-    from mudata import MuData
 
 EPSILON = np.finfo(np.float32).eps
 
@@ -101,7 +99,7 @@ def value_checker(arg_name: str, arg: Any, allowed_values: Iterable[Any]) -> Non
         )
 
 
-def _get_basis_obsm(adata: AnnData | MuData, basis: str) -> np.ndarray:
+def _get_basis_obsm(adata: ad.AnnData | md.MuData, basis: str) -> np.ndarray:
     """
     Get the multidimensional observation annotations named 'basis'.
     Tries to recover 'X_basis' if 'basis' is not a key of adata.obsm.
@@ -114,7 +112,7 @@ def _get_basis_obsm(adata: AnnData | MuData, basis: str) -> np.ndarray:
         raise KeyError(f"Could not find '{basis}' or 'X_{basis}' in .obsm")
 
 
-def _get_basis_obsp(adata: AnnData | MuData, basis: str) -> np.ndarray:
+def _get_basis_obsp(adata: ad.AnnData | md.MuData, basis: str) -> np.ndarray:
     """
     Get the pairwise observation annotations named 'basis'.
     Tries to recover 'X_basis' if 'basis' is not a key of adata.obsp.
@@ -125,6 +123,33 @@ def _get_basis_obsp(adata: AnnData | MuData, basis: str) -> np.ndarray:
         return adata.obsp[f"X_{basis}"]
     else:
         raise KeyError(f"Could not find '{basis}' or 'X_{basis}' in .obsp")
+
+
+def _concat_light(
+    adatas: Iterable[ad.AnnData | md.MuData],
+    obs_keys: Iterable[str] | None = None,
+    obsm_keys: Iterable[str] | None = None,
+) -> ad.AnnData:
+    """
+    Concatenate multiple AnnData or MuData objects without copying all
+    the data, but only the relavant 'obs_keys' and 'obsm_keys'.
+    """
+    # avoid copying all the data
+    n_obs_total = sum(adata.n_obs for adata in adatas)
+    combined = ad.AnnData(X=np.zeros((n_obs_total, 1)))
+    combined.obs_names = np.concatenate([adata.obs_names for adata in adatas])
+
+    if obs_keys is not None:
+        for key in obs_keys:
+            combined.obs[key] = np.concatenate([adata.obs[key] for adata in adatas])
+
+    if obsm_keys is not None:
+        for key in obsm_keys:
+            combined.obsm[key] = np.concatenate(
+                [_get_basis_obsm(adata, key) for adata in adatas]
+            )
+
+    return combined
 
 
 @njit

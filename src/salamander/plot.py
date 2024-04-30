@@ -14,7 +14,7 @@ from scipy.cluster import hierarchy
 from scipy.spatial.distance import pdist
 
 from .consts import COLORS_INDEL83, COLORS_SBS96, INDEL_TYPES_83, SBS_TYPES_96
-from .utils import _get_basis_obsm, _get_basis_obsp, match_to_catalog
+from .utils import _concat_light, _get_basis_obsm, _get_basis_obsp, match_to_catalog
 
 if TYPE_CHECKING:
     from anndata import AnnData
@@ -249,6 +249,24 @@ def scatter(
     return ax
 
 
+def scatter_multiple(
+    adatas: Iterable[AnnData | MuData],
+    x: str,
+    y: str | None = None,
+    ticks: bool = True,
+    color: str | None = None,
+    zorder: str | None = None,
+    **kwargs,
+) -> Axes:
+    obs_keys = [x, y, color, zorder]
+    obs_keys = [key for key in obs_keys if key is not None]
+    combined = _concat_light(adatas, obs_keys=obs_keys)
+    ax = scatter(
+        adata=combined, x=x, y=y, ticks=ticks, color=color, zorder=zorder, **kwargs
+    )
+    return ax
+
+
 def embedding_numpy(
     data: np.ndarray,
     dimensions: tuple[int, int] = (0, 1),
@@ -317,16 +335,56 @@ def embedding(
     return ax
 
 
+def embedding_multiple(
+    adatas: Iterable[AnnData | MuData],
+    basis: str,
+    dimensions: tuple[int, int] = (0, 1),
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    ticks: bool | None = None,
+    color: str | None = None,
+    zorder: str | None = None,
+    **kwargs,
+) -> Axes:
+    obs_keys = [color, zorder]
+    obs_keys = [key for key in obs_keys if key is not None]
+    combined = _concat_light(adatas, obs_keys=obs_keys, obsm_keys=[basis])
+    ax = embedding(
+        adata=combined,
+        basis=basis,
+        dimensions=dimensions,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        ticks=ticks,
+        color=color,
+        zorder=zorder,
+        **kwargs,
+    )
+    return ax
+
+
 def pca(adata: AnnData, **kwargs) -> Axes:
     return embedding(adata, basis="pca", **kwargs)
+
+
+def pca_multiple(adatas: Iterable[AnnData | MuData], **kwargs) -> Axes:
+    return embedding_multiple(adatas, basis="pca", **kwargs)
 
 
 def tsne(adata: AnnData, **kwargs) -> Axes:
     return embedding(adata, basis="tsne", **kwargs)
 
 
+def tsne_multiple(adatas: Iterable[AnnData | MuData], **kwargs) -> Axes:
+    return embedding_multiple(adatas, basis="tsne", **kwargs)
+
+
 def umap(adata: AnnData, **kwargs) -> Axes:
     return embedding(adata, basis="umap", **kwargs)
+
+
+def umap_multiple(adatas: Iterable[AnnData | MuData], **kwargs) -> Axes:
+    return embedding_multiple(adatas, basis="umap", **kwargs)
 
 
 def correlation_pandas(
