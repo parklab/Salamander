@@ -240,6 +240,19 @@ class MultimodalCorrNMF:
             )
         return auxs
 
+    def update_sample_scalings_mod(
+        self, mod_name: str, given_parameters_mod: dict[str, Any]
+    ) -> None:
+        if "sample_scalings" not in given_parameters_mod:
+            adata = self.mdata[mod_name]
+            asigs = self.asignatures[mod_name]
+            adata.obs["scalings"] = _utils_corrnmf.update_sample_scalings(
+                adata.X,
+                asigs.obs["scalings"].values,
+                asigs.obsm["embeddings"],
+                self.mdata.obsm["embeddings"],
+            )
+
     def update_sample_scalings(
         self,
         given_parameters: dict[str, Any] | None = None,
@@ -247,20 +260,24 @@ class MultimodalCorrNMF:
         if given_parameters is None:
             given_parameters = {}
 
-        for mod_name, adata in self.mdata.mod.items():
+        for mod_name in self.mod_names:
             if mod_name in given_parameters:
                 given_parameters_mod = given_parameters[mod_name]
             else:
                 given_parameters_mod = {}
+            self.update_sample_scalings_mod(mod_name, given_parameters_mod)
 
-            if "sample_scalings" not in given_parameters_mod:
-                asigs = self.asignatures[mod_name]
-                adata.obs["scalings"] = _utils_corrnmf.update_sample_scalings(
-                    adata.X,
-                    asigs.obs["scalings"].values,
-                    asigs.obsm["embeddings"],
-                    self.mdata.obsm["embeddings"],
-                )
+    def update_signature_scalings_mod(
+        self, mod_name: str, aux: np.ndarray, given_parameters_mod: dict[str, Any]
+    ) -> None:
+        if "signature_scalings" not in given_parameters_mod:
+            asigs = self.asignatures[mod_name]
+            asigs.obs["scalings"] = _utils_corrnmf.update_signature_scalings(
+                aux,
+                self.mdata[mod_name].obs["scalings"].values,
+                asigs.obsm["embeddings"],
+                self.mdata.obsm["embeddings"],
+            )
 
     def update_signature_scalings(
         self,
@@ -270,19 +287,14 @@ class MultimodalCorrNMF:
         if given_parameters is None:
             given_parameters = {}
 
-        for mod_name, asigs in self.asignatures.items():
+        for mod_name in self.mod_names:
             if mod_name in given_parameters:
                 given_parameters_mod = given_parameters[mod_name]
             else:
                 given_parameters_mod = {}
-
-            if "signature_scalings" not in given_parameters_mod:
-                asigs.obs["scalings"] = _utils_corrnmf.update_signature_scalings(
-                    auxs[mod_name],
-                    self.mdata[mod_name].obs["scalings"].values,
-                    asigs.obsm["embeddings"],
-                    self.mdata.obsm["embeddings"],
-                )
+            self.update_signature_scalings_mod(
+                mod_name, auxs[mod_name], given_parameters_mod
+            )
 
     def update_variance(self, given_parameters: dict[str, Any] | None = None) -> None:
         if given_parameters is None:
@@ -298,28 +310,54 @@ class MultimodalCorrNMF:
             variance = np.mean(embeddings**2)
             self.variance = np.clip(variance, EPSILON, None)
 
+    def update_signatures_mod(
+        self, mod_name: str, given_parameters_mod: dict[str, Any]
+    ) -> None:
+        if "asignatures" in given_parameters_mod:
+            n_given_signatures = given_parameters_mod["asignatures"].n_obs
+        else:
+            n_given_signatures = 0
+
+        asigs = self.asignatures[mod_name]
+        W = update_W(
+            self.mdata[mod_name].X.T,
+            asigs.X.T,
+            self.mdata[mod_name].obsm["exposures"].T,
+            n_given_signatures=n_given_signatures,
+        )
+        asigs.X = W.T
+
     def update_signatures(self, given_parameters: dict[str, Any] | None = None) -> None:
         if given_parameters is None:
             given_parameters = {}
 
-        for mod_name, asigs in self.asignatures.items():
+        for mod_name in self.mod_names:
             if mod_name in given_parameters:
                 given_parameters_mod = given_parameters[mod_name]
             else:
                 given_parameters_mod = {}
+            self.update_signatures_mod(mod_name, given_parameters_mod)
 
-            if "asignatures" in given_parameters_mod:
-                n_given_signatures = given_parameters_mod["asignatures"].n_obs
-            else:
-                n_given_signatures = 0
-
-            W = update_W(
-                self.mdata[mod_name].X.T,
-                asigs.X.T,
-                self.mdata[mod_name].obsm["exposures"].T,
-                n_given_signatures=n_given_signatures,
-            )
-            asigs.X = W.T
+    def update_signature_embeddings_mod(
+        self,
+        mod_name: str,
+        aux: np.ndarray,
+        outer_prods_sample_embeddings: np.ndarray,
+        given_parameters_mod: dict[str, Any],
+    ) -> None:
+        if "signature_embeddings" not in given_parameters_mod:
+            asigs = self.asignatures[mod_name]
+            for k, aux_row in enumerate(aux):
+                embedding_init = asigs.obsm["embeddings"][k, :]
+                asigs.obsm["embeddings"][k, :] = _utils_corrnmf.update_embedding(
+                    embedding_init,
+                    self.mdata.obsm["embeddings"],
+                    asigs.obs["scalings"][k],
+                    self.mdata[mod_name].obs["scalings"].values,
+                    self.variance,
+                    aux_row,
+                    outer_prods_sample_embeddings,
+                )
 
     def update_signature_embeddings(
         self,
@@ -339,26 +377,17 @@ class MultimodalCorrNMF:
             self.mdata.obsm["embeddings"],
             self.mdata.obsm["embeddings"],
         )
-
-        for mod_name, asigs in self.asignatures.items():
+        for mod_name in self.mod_names:
             if mod_name in given_parameters:
                 given_parameters_mod = given_parameters[mod_name]
             else:
                 given_parameters_mod = {}
-
-            if "signature_embeddings" not in given_parameters_mod:
-                aux = auxs[mod_name]
-                for k, aux_row in enumerate(aux):
-                    embedding_init = asigs.obsm["embeddings"][k, :]
-                    asigs.obsm["embeddings"][k, :] = _utils_corrnmf.update_embedding(
-                        embedding_init,
-                        self.mdata.obsm["embeddings"],
-                        asigs.obs["scalings"][k],
-                        self.mdata[mod_name].obs["scalings"].values,
-                        self.variance,
-                        aux_row,
-                        outer_prods_sample_embeddings,
-                    )
+            self.update_signature_embeddings_mod(
+                mod_name,
+                auxs[mod_name],
+                outer_prods_sample_embeddings,
+                given_parameters_mod,
+            )
 
     def update_sample_embeddings(self, auxs: dict[str, np.ndarray]) -> None:
         sig_embeddings = np.concatenate(
