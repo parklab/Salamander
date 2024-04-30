@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from anndata import AnnData
     from matplotlib.colors import Colormap
     from matplotlib.typing import ColorType
+    from mudata import MuData
     from seaborn.matrix import ClusterGrid
 
 
@@ -100,18 +101,38 @@ def _annotate_plot(
 
 
 def _scatter_1d(
-    data: np.ndarray, xlabel: str | None = None, ax: Axes | None = None, **kwargs
+    data: np.ndarray,
+    xlabel: str | None = None,
+    color: list[ColorType] | None = None,
+    zorder: list[int] | None = None,
+    ax: Axes | None = None,
+    **kwargs,
 ) -> Axes:
     if data.ndim != 1:
-        raise ValueError(f"The datapoints of {data} (rows) have to be one-dimensional.")
+        raise ValueError("The data have to be one-dimensional.")
 
     if ax is None:
         _, ax = plt.subplots(figsize=(4, 1))
 
+    if zorder is None:
+        zorder = len(data) * [1]
+
     ax.spines[["left", "bottom"]].set_visible(False)
     ax.get_yaxis().set_visible(False)
-    ax.axhline(y=0, color="black", zorder=1)
-    sns.scatterplot(x=data, y=np.zeros_like(data), ax=ax, zorder=2, **kwargs)
+    ax.axhline(y=0, color="black", zorder=np.min(zorder) - 1)
+
+    for zord in np.unique(zorder):
+        subgroup = np.where(zorder == zord)[0]
+        subdata = data[subgroup]
+        subgroup_color = [color[d] for d in subgroup] if color is not None else None
+        sns.scatterplot(
+            x=subdata,
+            y=np.zeros_like(subdata),
+            color=subgroup_color,
+            zorder=zord,
+            ax=ax,
+            **kwargs,
+        )
 
     if xlabel:
         ax.set_xlabel(xlabel)
@@ -124,6 +145,8 @@ def _scatter_2d(
     xlabel: str | None = None,
     ylabel: str | None = None,
     ticks: bool = True,
+    color: list[ColorType] | None = None,
+    zorder: list[int] | None = None,
     ax: Axes | None = None,
     **kwargs,
 ) -> Axes:
@@ -131,12 +154,26 @@ def _scatter_2d(
     The rows (!) of 'data' are assumed to be the data points.
     """
     if data.shape[1] != 2:
-        raise ValueError(f"The datapoints of {data} (rows) have to be two-dimensional.")
+        raise ValueError("The datapoints (rows) have to be two-dimensional.")
 
     if ax is None:
         _, ax = plt.subplots(figsize=(4, 4))
 
-    sns.scatterplot(x=data[:, 0], y=data[:, 1], ax=ax, **kwargs)
+    if zorder is None:
+        zorder = len(data) * [1]
+
+    for zord in np.unique(zorder):
+        subgroup = np.where(zorder == zord)[0]
+        subdata = data[subgroup]
+        subgroup_color = [color[d] for d in subgroup] if color is not None else None
+        sns.scatterplot(
+            x=subdata[:, 0],
+            y=subdata[:, 1],
+            color=subgroup_color,
+            zorder=zord,
+            ax=ax,
+            **kwargs,
+        )
 
     if xlabel:
         ax.set_xlabel(xlabel)
@@ -155,6 +192,8 @@ def scatter_numpy(
     xlabel: str | None = None,
     ylabel: str | None = None,
     ticks: bool = True,
+    color: list[ColorType] | None = None,
+    zorder: list[int] | None = None,
     annotations: Iterable[str] | None = None,
     annotation_kwargs: dict[str, Any] | None = None,
     adjust_annotations: bool = True,
@@ -163,10 +202,10 @@ def scatter_numpy(
     **kwargs,
 ) -> Axes:
     if data.ndim == 1 or data.shape[1] == 1:
-        ax = _scatter_1d(data, xlabel, ax, **kwargs)
+        ax = _scatter_1d(data, xlabel, color, zorder, ax, **kwargs)
         data_2d = np.vstack([data.flatten(), np.zeros_like(data.flatten())]).T
     elif data.ndim == 2 and data.shape[1] == 2:
-        ax = _scatter_2d(data, xlabel, ylabel, ticks, ax, **kwargs)
+        ax = _scatter_2d(data, xlabel, ylabel, ticks, color, zorder, ax, **kwargs)
         data_2d = data
     else:
         raise ValueError(
@@ -188,13 +227,25 @@ def scatter_numpy(
     return ax
 
 
-def scatter(adata: AnnData, x: str, y: str | None = None, **kwargs) -> Axes:
+def scatter(
+    adata: AnnData | MuData,
+    x: str,
+    y: str | None = None,
+    ticks: bool = True,
+    color: str | None = None,
+    zorder: str | None = None,
+    **kwargs,
+) -> Axes:
     if y is None:
-        data = adata.obs(x).to_numpy()
+        data = adata.obs[x].to_numpy()
     else:
         data = adata.obs[[x, y]].to_numpy()
 
-    ax = scatter_numpy(data, xlabel=x, ylabel=y, **kwargs)
+    col = list(adata.obs[color]) if color is not None else None
+    zord = list(adata.obs[zorder]) if zorder is not None else None
+    ax = scatter_numpy(
+        data, xlabel=x, ylabel=y, ticks=ticks, color=col, zorder=zord, **kwargs
+    )
     return ax
 
 
@@ -203,31 +254,39 @@ def embedding_numpy(
     dimensions: tuple[int, int] = (0, 1),
     xlabel: str | None = None,
     ylabel: str | None = None,
+    ticks: bool = True,
+    color: list[ColorType] | None = None,
+    zorder: list[int] | None = None,
     **kwargs,
 ) -> Axes:
     if data.ndim == 2 and data.shape[1] > 2:
         data = data[:, dimensions]
 
-    ax = scatter_numpy(data, xlabel=xlabel, ylabel=ylabel, **kwargs)
+    ax = scatter_numpy(data, xlabel, ylabel, ticks, color, zorder, **kwargs)
     return ax
 
 
+# fmt: off
 def _basisobsm2name(basis: str) -> str:
     name = (
-        "PC"
-        if basis == "pca"
-        else "tSNE" if basis == "tsne" else "UMAP" if basis == "umap" else basis
+        "PC" if basis == "pca"
+        else "tSNE" if basis == "tsne"
+        else "UMAP" if basis == "umap"
+        else basis
     )
     return name
+# fmt: on
 
 
 def embedding(
-    adata: AnnData,
+    adata: AnnData | MuData,
     basis: str,
     dimensions: tuple[int, int] = (0, 1),
     xlabel: str | None = None,
     ylabel: str | None = None,
     ticks: bool | None = None,
+    color: str | None = None,
+    zorder: str | None = None,
     **kwargs,
 ) -> Axes:
     data = _get_basis_obsm(adata, basis)
@@ -243,8 +302,17 @@ def embedding(
     if ticks is None:
         ticks = False if basis in ["tsne", "umap"] else True
 
+    col = list(adata.obs[color]) if color is not None else None
+    zord = list(adata.obs[zorder]) if zorder is not None else None
     ax = embedding_numpy(
-        data, dimensions=dimensions, xlabel=xlabel, ylabel=ylabel, ticks=ticks, **kwargs
+        data,
+        dimensions=dimensions,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        ticks=ticks,
+        color=col,
+        zorder=zord,
+        **kwargs,
     )
     return ax
 
