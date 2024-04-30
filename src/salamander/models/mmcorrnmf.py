@@ -374,14 +374,13 @@ class MultimodalCorrNMF:
 
         for d, aux_col in enumerate(aux.T):
             embedding_init = self.mdata.obsm["embeddings"][d, :]
-            scalings = np.concatenate(
-                [
-                    np.repeat(adata.obs["scalings"][d], n_signatures)
-                    for adata, n_signatures in zip(
-                        self.mdata.mod.values(), self.ns_signatures
-                    )
-                ]
-            )
+            scalings = [
+                np.repeat(adata.obs["scalings"][d], n_signatures)
+                for adata, n_signatures in zip(
+                    self.mdata.mod.values(), self.ns_signatures
+                )
+            ]
+            scalings = np.concatenate(scalings)
             self.mdata.obsm["embeddings"][d, :] = _utils_corrnmf.update_embedding(
                 embedding_init,
                 sig_embeddings,
