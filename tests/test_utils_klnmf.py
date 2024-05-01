@@ -2,15 +2,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from salamander.nmf_framework import _utils_klnmf
+from salamander.models import _utils_klnmf
 
-PATH_TEST_DATA = "tests/test_data"
-PATH_TEST_DATA_UTILS_KLNMF = f"{PATH_TEST_DATA}/nmf_framework/utils_klnmf"
+PATH = "tests/test_data"
+PATH_TEST_DATA = f"{PATH}/models/utils_klnmf"
 
 
 @pytest.fixture
 def counts():
-    return pd.read_csv(f"{PATH_TEST_DATA_UTILS_KLNMF}/counts.csv", index_col=0)
+    return pd.read_csv(f"{PATH_TEST_DATA}/counts.csv", index_col=0)
 
 
 @pytest.fixture(params=[1, 2])
@@ -20,9 +20,8 @@ def n_signatures(request):
 
 @pytest.fixture
 def matrices_input(counts, n_signatures):
-    W = np.load(f"{PATH_TEST_DATA_UTILS_KLNMF}/W_nsigs{n_signatures}.npy")
-    H = np.load(f"{PATH_TEST_DATA_UTILS_KLNMF}/H_nsigs{n_signatures}.npy")
-
+    W = np.load(f"{PATH_TEST_DATA}/W_nsigs{n_signatures}.npy")
+    H = np.load(f"{PATH_TEST_DATA}/H_nsigs{n_signatures}.npy")
     return (counts.values, W, H)
 
 
@@ -42,7 +41,7 @@ def weights_l_half(counts):
 
 @pytest.fixture
 def kl_divergence_output(n_signatures):
-    path = f"{PATH_TEST_DATA_UTILS_KLNMF}/kl_divergence_nsigs{n_signatures}.npy"
+    path = f"{PATH_TEST_DATA}/kl_divergence_nsigs{n_signatures}.npy"
     return np.load(path)
 
 
@@ -61,10 +60,7 @@ def test_kl_divergence_weights(matrices_input, weights_kl, kl_divergence_output)
 
 @pytest.fixture
 def samplewise_kl_divergence_output(n_signatures):
-    path = (
-        f"{PATH_TEST_DATA_UTILS_KLNMF}/"
-        f"samplewise_kl_divergence_nsigs{n_signatures}.npy"
-    )
+    path = f"{PATH_TEST_DATA}/" f"samplewise_kl_divergence_nsigs{n_signatures}.npy"
     return np.load(path)
 
 
@@ -93,7 +89,7 @@ def test_samplewise_kl_divergence_weights(
 
 @pytest.fixture
 def poisson_llh_output(n_signatures):
-    path = f"{PATH_TEST_DATA_UTILS_KLNMF}/poisson_llh_nsigs{n_signatures}.npy"
+    path = f"{PATH_TEST_DATA}/poisson_llh_nsigs{n_signatures}.npy"
     return np.load(path)
 
 
@@ -103,7 +99,7 @@ def test_poisson_llh(matrices_input, poisson_llh_output):
 
 @pytest.fixture
 def W_updated(n_signatures):
-    path = f"{PATH_TEST_DATA_UTILS_KLNMF}/W_updated_mu-standard_nsigs{n_signatures}.npy"
+    path = f"{PATH_TEST_DATA}/W_updated_standard_nsigs{n_signatures}.npy"
     return np.load(path)
 
 
@@ -133,7 +129,7 @@ def test_given_signatures_update_W(matrices_input):
 
 @pytest.fixture
 def H_updated(n_signatures):
-    path = f"{PATH_TEST_DATA_UTILS_KLNMF}/H_updated_mu-standard_nsigs{n_signatures}.npy"
+    path = f"{PATH_TEST_DATA}/H_updated_standard_nsigs{n_signatures}.npy"
     return np.load(path)
 
 
@@ -151,9 +147,9 @@ def test_update_H_weights_l_half(matrices_input, weights_kl, weights_l_half, H_u
 
 @pytest.fixture
 def WH_updated(n_signatures):
-    suffix = f"_updated_mu-standard_nsigs{n_signatures}.npy"
-    path_W = f"{PATH_TEST_DATA_UTILS_KLNMF}/W{suffix}"
-    path_H = f"{PATH_TEST_DATA_UTILS_KLNMF}/H{suffix}"
+    suffix = f"_updated_joint_nsigs{n_signatures}.npy"
+    path_W = f"{PATH_TEST_DATA}/W{suffix}"
+    path_H = f"{PATH_TEST_DATA}/H{suffix}"
     return np.load(path_W), np.load(path_H)
 
 
