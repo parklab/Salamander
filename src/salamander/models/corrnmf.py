@@ -208,12 +208,12 @@ class CorrNMF(SignatureNMF):
             basis = method
 
         if color is None:
-            color = "color_embedding"
+            color = "color_embeddings"
             self.asignatures.obs[color] = self.n_signatures * ["black"]
             self.adata.obs[color] = self.adata.n_obs * ["#1f77b4"]  # default blue
 
         if zorder is None:
-            zorder = "zorder_embedding"
+            zorder = "zorder_embeddings"
             self.asignatures.obs[zorder] = self.n_signatures * [2]
             self.adata.obs[zorder] = self.adata.n_obs * [1]
 

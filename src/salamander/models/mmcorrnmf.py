@@ -710,13 +710,13 @@ class MultimodalCorrNMF:
             basis = method
 
         if color is None:
-            color = "color_embedding"
+            color = "color_embeddings"
             for asigs in self.asignatures.values():
                 asigs.obs[color] = asigs.n_obs * ["black"]
             self.mdata.obs[color] = self.mdata.n_obs * ["#1f77b4"]  # default blue
 
         if zorder is None:
-            zorder = "zorder_embedding"
+            zorder = "zorder_embeddings"
             for asigs in self.asignatures.values():
                 asigs.obs[zorder] = asigs.n_obs * [2]
             self.mdata.obs[zorder] = self.mdata.n_obs * [1]
