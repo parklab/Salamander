@@ -150,6 +150,12 @@ class MultimodalCorrNMF:
 
     @property
     def reconstruction_errors(self) -> dict[str, float]:
+        if any(
+            "reconstruction_error" not in self.mdata[mod_name].obs
+            for mod_name in self.mod_names
+        ):
+            self.compute_reconstruction_errors()
+
         return {
             mod_name: np.sum(adata.obs["reconstruction_error"])
             for mod_name, adata in self.mdata.mod.items()
