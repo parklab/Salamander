@@ -11,8 +11,7 @@
 [style-image]: https://img.shields.io/badge/code%20style-black-000000.svg
 [style-url]: https://github.com/psf/black
 
-Salamander is a non-negative matrix factorization (NMF) framework for signature analysis.
-It implements multiple NMF algorithms, common visualizations, and can be easily customized & expanded.
+Salamander is a non-negative matrix factorization (NMF) framework for signature analysis build on top of [AnnData](https://anndata.readthedocs.io/en/latest/) and [MuData](https://mudata.readthedocs.io/en/latest/). It implements multiple NMF algorithms, common visualizations, and can be easily customized & expanded.
 
 ---
 
@@ -28,16 +27,15 @@ pip install salamander-learn
 The following example illustrates the basic syntax:
 
 ```python
-import pandas as pd
-import salamander
+import anndata as ad
+import salamander as sal
 
-# samples and features have to be named appropriately
-data_path = "..."
-data = pd.read_csv(data_path, index_col=0)
+# initialize data
+adata = ad.AnnData(...)
 
-# NMF with a Poisson noise model
-model = salamander.KLNMF(n_signatures=5)
-model.fit(data)
+# NMF with Poisson noise
+model = sal.models.KLNMF(n_signatures=5)
+model.fit(adata)
 
 # barplot
 model.plot_signatures()
@@ -52,7 +50,6 @@ model.plot_correlation()
 model.plot_correlation(data="samples")
 
 # dimensionality reduction of the exposures
-# method: umap, pca or tsne
 model.plot_embeddings(method="umap")
 ```
 
