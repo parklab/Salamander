@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 ---
 
+## 0.4.0 - 2024-05
+### Changed
+  - Refactor using the AnnData and MuData data structures
+
 ## 0.3.2 - 2024-01
 ### Fixed
   - Support fixing the model variance of (multimodal) CorrNMF models during training
