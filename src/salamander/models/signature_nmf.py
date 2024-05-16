@@ -388,18 +388,22 @@ class SignatureNMF(ABC):
         self,
         asignatures_other: AnnData,
         metric: str = "cosine",
+        keep_names=False,
     ) -> None:
         """
         Reorder the model parameters to match the order of another
         collection of signatures.
         """
+        names = self.asignatures.obs_names
         reordered_indices = match_signatures_pair(
-            asignatures_other.to_df().T, self.asignatures.to_df().T, metric=metric
+            asignatures_other.to_df(), self.asignatures.to_df(), metric=metric
         )
         self.asignatures = self.asignatures[reordered_indices, :].copy()
         self.adata.obsm["exposures"] = self.adata.obsm["exposures"][
             :, reordered_indices
         ]
+        if not keep_names:
+            self.asignatures.obs_names = names
 
     def plot_history(self, outfile: str | None = None, **kwargs) -> Axes:
         """
