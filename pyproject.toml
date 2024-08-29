@@ -15,7 +15,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
 adjustText = "^0.8"
-anndata = "^0.10.5"
+anndata = ">=0.10.5, <0.10.9"
 fastcluster = "^1.2.6"
 matplotlib = "^3.7.1"
 mudata = "^0.2.3"
