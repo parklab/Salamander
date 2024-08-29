@@ -346,7 +346,6 @@ def update_WH(
         H = H.clip(EPSILON)
         return W_updated, H
 
-    print("going here")
     intermediate = 4.0 * H * (W.T @ aux)
 
     if weights_kl is not None:
