@@ -223,7 +223,7 @@ def update_H(
     W: np.ndarray,
     H: np.ndarray,
     weights_kl: np.ndarray | None = None,
-    weights_l_half: np.ndarray | None = None,
+    weights_lhalf: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     The multiplicative update rule of the exposure matrix H
@@ -245,8 +245,8 @@ def update_H(
     weights_kl : np.ndarray of shape (n_samples,)
         per sample weights in the KL-divergence loss
 
-    weights_l_half : np.ndarray of shape (n_samples,)
-        per sample l_half penalty weights. They can be used to induce
+    weights_lhalf : np.ndarray of shape (n_samples,)
+        per sample 'lhalf' penalty weights. They can be used to induce
         sparse exposures.
 
     Returns
@@ -257,7 +257,7 @@ def update_H(
     """
     aux = X / (W @ H)
 
-    if weights_l_half is None:
+    if weights_lhalf is None:
         # in-place
         H *= W.T @ aux
         H = H.clip(EPSILON)
@@ -268,8 +268,8 @@ def update_H(
     if weights_kl is not None:
         intermediate *= weights_kl**2
 
-    discriminant = 0.25 * weights_l_half**2 + intermediate
-    H_updated = 0.25 * (weights_l_half / 2 - np.sqrt(discriminant)) ** 2
+    discriminant = 0.25 * weights_lhalf**2 + intermediate
+    H_updated = 0.25 * (weights_lhalf / 2 - np.sqrt(discriminant)) ** 2
 
     if weights_kl is not None:
         H_updated /= weights_kl**2
@@ -284,7 +284,7 @@ def update_WH(
     W: np.ndarray,
     H: np.ndarray,
     weights_kl: np.ndarray | None = None,
-    weights_l_half: np.ndarray | None = None,
+    weights_lhalf: np.ndarray | None = None,
     n_given_signatures: int = 0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -308,8 +308,8 @@ def update_WH(
     weights_kl : np.ndarray of shape (n_samples,)
         per sample weights in the KL-divergence loss
 
-    weights_l_half : np.ndarray of shape (n_samples,)
-        per sample l_half penalty weights. They can be used to induce
+    weights_lhalf : np.ndarray of shape (n_samples,)
+        per sample 'lhalf' penalty weights. They can be used to induce
         sparse exposures.
 
     n_given_signatures : int
@@ -340,19 +340,20 @@ def update_WH(
         W_updated[:, :n_given_signatures] = W[:, :n_given_signatures].copy()
         W_updated = W_updated.clip(EPSILON)
 
-    if weights_l_half is None:
+    if weights_lhalf is None:
         # in-place
         H *= W.T @ aux
         H = H.clip(EPSILON)
         return W_updated, H
 
+    print("going here")
     intermediate = 4.0 * H * (W.T @ aux)
 
     if weights_kl is not None:
         intermediate *= weights_kl**2
 
-    discriminant = 0.25 * weights_l_half**2 + intermediate
-    H_updated = 0.25 * (weights_l_half / 2 - np.sqrt(discriminant)) ** 2
+    discriminant = 0.25 * weights_lhalf**2 + intermediate
+    H_updated = 0.25 * (weights_lhalf / 2 - np.sqrt(discriminant)) ** 2
 
     if weights_kl is not None:
         H_updated /= weights_kl**2
