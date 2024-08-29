@@ -644,8 +644,11 @@ def barplot_pandas(
             _, axes = plt.subplots(n_obs, 2, figsize=(8, n_obs))
 
     assert isinstance(
-        axes, Iterable
+        axes, np.ndarray
     ), "Adding multiple barplots to custom 'axes' requires 'axes' to be iterable."
+
+    if catalog is None:
+        axes = axes.flatten()
 
     for ax, row in zip(axes, data.T):
         _barplot_matched(

@@ -49,7 +49,7 @@ class KLNMF(StandardNMF):
             tol,
         )
         self.weights_kl = None
-        self.weights_l_half = None
+        self.weights_lhalf = None
 
     def compute_reconstruction_errors(self) -> None:
         """
@@ -72,9 +72,9 @@ class KLNMF(StandardNMF):
             self.adata.obsm["exposures"].T,
             self.weights_kl,
         )
-        if self.weights_l_half is not None:
+        if self.weights_lhalf is not None:
             of_value += np.dot(
-                self.weights_l_half,
+                self.weights_lhalf,
                 np.sum(np.sqrt(self.adata.obsm["exposures"].T), axis=0),
             )
         return of_value
@@ -99,7 +99,7 @@ class KLNMF(StandardNMF):
             self.asignatures.X.T,
             self.adata.obsm["exposures"].T,
             self.weights_kl,
-            self.weights_l_half,
+            self.weights_lhalf,
             n_given_signatures,
         )
         self.asignatures.X = W.T
