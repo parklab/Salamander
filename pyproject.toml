@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "salamander-learn"
-version = "0.4.1"
+version = "0.4.2"
 description = "Salamander is a non-negative matrix factorization framework for signature analysis"
 license = "MIT"
 authors = ["Benedikt Geiger"]
