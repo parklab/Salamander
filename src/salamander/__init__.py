@@ -7,7 +7,7 @@ from . import models
 from . import plot as pl
 from . import tools as tl
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 pl.set_salamander_style()
 
